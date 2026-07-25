@@ -225,6 +225,20 @@
     </div>
   </div>
 
+  <!-- NAME CAPTURE -->
+  <div class="screen" id="screen-name">
+    <div class="card">
+      <div class="q-text" id="nameQText">What's your name?</div>
+      <div class="q-hint" id="nameHint" style="display:none;">Optional — leave blank if you'd rather not share.</div>
+      <input type="text" id="nameInput" placeholder="Your name">
+
+      <div class="nav-row" style="margin-top:18px;">
+        <button class="btn btn-ghost" onclick="goToRoleSelect()">Back</button>
+        <button class="btn btn-primary" id="nameNextBtn" onclick="submitName()">Next</button>
+      </div>
+    </div>
+  </div>
+
   <!-- QUESTION SCREEN -->
   <div class="screen" id="screen-questions">
     <div class="card">
@@ -409,9 +423,12 @@ const QUESTIONS = {
   }
 };
 
+const NAME_REQUIRED_ROLES = ['owner', 'reception_dedicated', 'reception_informal', 'trainer', 'cleaner'];
+
 let currentRole = null;
 let currentIndex = 0;
 let answers = {};
+let respondentName = '';
 
 function micIconSVG(){
   return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -428,6 +445,35 @@ function selectRole(role){
   document.getElementById('heroSub').textContent = QUESTIONS[role].heroSub;
   document.getElementById('roleTag').textContent = QUESTIONS[role].label;
   document.getElementById('topBack').style.display = 'block';
+
+  // reception_branch's final role (dedicated/informal) isn't known yet — the
+  // name step for that branch happens once nextQuestion() resolves it below.
+  if(role === 'reception_branch'){
+    showScreen('screen-questions');
+    renderQuestion();
+  } else {
+    showNameScreen(role);
+  }
+}
+
+function showNameScreen(role){
+  const required = NAME_REQUIRED_ROLES.includes(role);
+  const hintEl = document.getElementById('nameHint');
+  hintEl.style.display = required ? 'none' : 'block';
+
+  const input = document.getElementById('nameInput');
+  input.value = respondentName;
+
+  const nextBtn = document.getElementById('nameNextBtn');
+  const updateState = () => { nextBtn.disabled = required && !input.value.trim(); };
+  input.oninput = updateState;
+  updateState();
+
+  showScreen('screen-name');
+}
+
+function submitName(){
+  respondentName = document.getElementById('nameInput').value.trim();
   showScreen('screen-questions');
   renderQuestion();
 }
@@ -436,6 +482,7 @@ function goToRoleSelect(){
   document.getElementById('heroTitle').textContent = "Help us understand how things actually work";
   document.getElementById('heroSub').textContent = "No wrong answers. Pick who you are below — this takes 3 to 6 minutes on your phone.";
   document.getElementById('topBack').style.display = 'none';
+  respondentName = '';
   showScreen('screen-role');
 }
 
@@ -574,7 +621,7 @@ function nextQuestion(){
     document.getElementById('heroTitle').textContent = QUESTIONS[nextRole].heroTitle;
     document.getElementById('heroSub').textContent = QUESTIONS[nextRole].heroSub;
     document.getElementById('roleTag').textContent = QUESTIONS[nextRole].label;
-    renderQuestion();
+    showNameScreen(nextRole);
     return;
   }
 
@@ -622,6 +669,7 @@ async function finishForm(){
       .insert({
         role: currentRole,
         role_label: QUESTIONS[currentRole].label,
+        respondent_name: respondentName || null,
         answers: structuredAnswers,
         user_agent: navigator.userAgent
       });

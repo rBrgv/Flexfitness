@@ -54,6 +54,9 @@
     background:var(--accent); color:#fff; font-size:12px; font-weight:700;
     padding:4px 10px; border-radius:20px;
   }
+  .respondent-name{
+    font-size:13px; font-weight:700; color:var(--ink); margin-left:8px;
+  }
   .timestamp{font-size:12px; color:var(--muted);}
   .qa{margin-bottom:10px; font-size:14px; line-height:1.5;}
   .qa .q{font-weight:700; color:var(--ink);}
@@ -171,9 +174,16 @@ function renderResults(){
       qaHtml += `<div class="qa"><div class="q">${escapeHtml(qa.question)}</div><div class="a ${skipped ? 'skipped' : ''}">${escapeHtml(qa.answer)}</div></div>`;
     });
 
+    const nameHtml = resp.respondent_name
+      ? `<span class="respondent-name">${escapeHtml(resp.respondent_name)}</span>`
+      : '';
+
     card.innerHTML = `
       <div class="meta">
-        <span class="role-pill">${escapeHtml(resp.role_label)}</span>
+        <span>
+          <span class="role-pill">${escapeHtml(resp.role_label)}</span>
+          ${nameHtml}
+        </span>
         <span class="timestamp">${dateStr}</span>
       </div>
       ${qaHtml}

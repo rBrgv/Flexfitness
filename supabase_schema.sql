@@ -7,10 +7,15 @@ create table if not exists discovery_responses (
   id uuid primary key default gen_random_uuid(),
   role text not null,               -- 'owner' | 'reception_dedicated' | 'reception_informal' | 'trainer' | 'cleaner' | 'member' | 'parent'
   role_label text not null,         -- human-readable label shown in the form, e.g. "Reception (Dedicated)"
+  respondent_name text,             -- required for staff roles, optional for member/parent — nullable since it's skippable
   answers jsonb not null,           -- [{ "question": "...", "answer": "..." }, ...]
   submitted_at timestamptz not null default now(),
   user_agent text                   -- helps you tell iPhone vs Android submissions (voice input worked or not)
 );
+
+-- If discovery_responses already exists in your project (schema already ran once),
+-- `create table if not exists` above won't add the new column — run this too:
+alter table discovery_responses add column if not exists respondent_name text;
 
 -- Index for filtering/sorting the results view by role and date
 create index if not exists idx_discovery_role on discovery_responses(role);
