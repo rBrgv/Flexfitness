@@ -30,6 +30,7 @@ create index if not exists idx_discovery_submitted on discovery_responses(submit
 
 alter table discovery_responses enable row level security;
 
+drop policy if exists "Anyone can submit a response" on discovery_responses;
 create policy "Anyone can submit a response"
   on discovery_responses
   for insert
