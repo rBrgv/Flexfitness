@@ -156,6 +156,7 @@ const TOTAL_STEPS = SECTIONS.length + 1; // + review step
 let currentStep = 0; // 0..SECTIONS.length-1 = sections, SECTIONS.length = review
 let answers = loadDraft();
 let sectionErrors = {};
+let submitError = null;
 
 function defaultAnswers(){
   const a = {};
@@ -350,6 +351,7 @@ function renderReview(){
       <input type="checkbox" style="width:18px;height:18px;margin-top:2px;" ${approved ? 'checked' : ''} onchange="onApprovalToggle(this.checked)">
       <span>I, as the gym owner, confirm this information is accurate and approved for use by the WhatsApp AI assistant.</span>
     </label>
+    ${submitError ? `<div class="field-error" style="margin-bottom:10px;">${escapeHtml(submitError)}</div>` : ''}
     <div class="nav-row" style="margin-top:14px;">
       <button class="btn btn-ghost" onclick="prevStep()">Back</button>
       <button class="btn btn-primary" id="submitBtn" ${(!approved || result.hasErrors) ? 'disabled' : ''} onclick="submitQuestionnaire()">Submit</button>
@@ -456,21 +458,29 @@ async function submitQuestionnaire(){
   const outputs = KnowledgeLogic.buildOutputs(SECTIONS, answers);
   const btn = document.getElementById('submitBtn');
   if(btn){ btn.disabled = true; btn.textContent = 'Submitting…'; }
+  submitError = null;
 
-  if(supabaseClient){
-    try{
-      const { error } = await supabaseClient.from('chatbot_knowledge_responses').insert({
-        gym_name: answers.gymName || null,
-        answers: answers,
-        outputs: outputs,
-        approved: true,
-        approved_by: answers.finalApprover || null,
-        submitted_at: new Date().toISOString(),
-      });
-      if(error) console.error('Supabase submit failed:', error);
-    }catch(err){
-      console.error('Supabase submit failed:', err);
-    }
+  if(!supabaseClient){
+    submitError = "Couldn't connect to save your submission — check your internet connection and try again. Nothing has been lost; your answers are still saved as a draft.";
+    render();
+    return;
+  }
+
+  try{
+    const { error } = await supabaseClient.from('chatbot_knowledge_responses').insert({
+      gym_name: answers.gymName || null,
+      answers: answers,
+      outputs: outputs,
+      approved: true,
+      approved_by: answers.finalApprover || null,
+      submitted_at: new Date().toISOString(),
+    });
+    if(error) throw error;
+  }catch(err){
+    console.error('Supabase submit failed:', err);
+    submitError = "Couldn't save your submission — please try again, or let the team know if this keeps happening. Nothing has been lost; your answers are still saved as a draft.";
+    render();
+    return;
   }
 
   try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
