@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Fitness — WhatsApp AI Knowledge & Guardrails</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#12181B; --paper:#FBF9F6; --panel:#FFFFFF; --line:#E4E0D8;
+    --accent:#1F6F5C; --accent-dark:#134A3D; --gold:#C08A3E; --muted:#6B7280; --danger:#B4491F;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; padding-bottom:80px;
+  }
+  .wrap{max-width:820px; margin:0 auto; padding:0 20px;}
+
+  header.hero{
+    background:linear-gradient(160deg,var(--accent-dark) 0%,var(--accent) 100%);
+    color:#fff; padding:32px 20px 38px; position:relative; overflow:hidden;
+  }
+  .eyebrow{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:700; margin-bottom:10px;}
+  h1{font-size:22px; line-height:1.3; margin:0 0 8px; font-weight:800;}
+  .hero p{font-size:14px; line-height:1.5; color:rgba(255,255,255,0.85); margin:0; max-width:60ch;}
+
+  .content{margin-top:-18px; position:relative; z-index:2;}
+  .card{
+    background:var(--panel); border:1px solid var(--line); border-radius:16px;
+    padding:22px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,0.03);
+  }
+  .progress-track{height:6px; background:var(--line); border-radius:3px; margin:16px 0 0; overflow:hidden;}
+  .progress-fill{height:100%; background:var(--accent); border-radius:3px; transition:width .25s ease;}
+  .progress-label{font-size:12px; color:var(--muted); margin-top:8px; display:flex; justify-content:space-between;}
+  .draft-status{font-size:12px; color:var(--muted); font-style:italic;}
+
+  .section-title{font-size:19px; font-weight:800; margin:0 0 4px;}
+  .section-intro{font-size:13px; color:var(--muted); margin:0 0 18px; line-height:1.5;}
+
+  .field-group{margin-bottom:20px;}
+  .field-label{font-weight:700; font-size:14px; margin-bottom:6px; display:block;}
+  .field-help{font-size:12px; color:var(--muted); margin:-2px 0 8px;}
+  .field-error{font-size:12px; color:var(--danger); margin-top:4px;}
+  .required-mark{color:var(--danger);}
+
+  input[type=text], input[type=tel], input[type=email], input[type=url],
+  input[type=date], input[type=number], input[type=file], textarea, select{
+    width:100%; border:1.5px solid var(--line); border-radius:10px;
+    padding:11px 12px; font-size:14px; font-family:inherit; color:var(--ink);
+    background:#fff;
+  }
+  textarea{min-height:70px; resize:vertical;}
+  input:focus, textarea:focus, select:focus{outline:none; border-color:var(--accent);}
+  input.has-error, textarea.has-error, select.has-error{border-color:var(--danger);}
+
+  .choice-row{display:flex; gap:10px;}
+  .choice{
+    flex:1; border:1.5px solid var(--line); border-radius:10px; padding:10px 12px;
+    font-size:14px; cursor:pointer; background:#fff; text-align:center; font-family:inherit;
+  }
+  .choice.selected{border-color:var(--accent); background:#EAF3F0; color:var(--accent-dark); font-weight:700;}
+
+  .table-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:12px; margin-bottom:8px;}
+  table.kv{border-collapse:collapse; width:100%; min-width:640px;}
+  table.kv th{
+    background:#F4F1EA; font-size:12px; text-align:left; padding:8px 10px;
+    border-bottom:1px solid var(--line); white-space:nowrap; position:sticky; top:0;
+  }
+  table.kv td{padding:6px; border-bottom:1px solid var(--line); vertical-align:top; min-width:140px;}
+  table.kv td.locked-cell{font-size:13px; font-weight:700; padding:10px; white-space:nowrap;}
+  table.kv input, table.kv textarea, table.kv select{border-radius:6px; padding:7px 8px; font-size:13px; min-width:120px;}
+  table.kv textarea{min-height:40px;}
+  .row-actions{display:flex; gap:4px; padding:4px;}
+  .row-actions button{
+    border:1px solid var(--line); background:#fff; border-radius:6px; width:26px; height:26px;
+    cursor:pointer; font-size:12px; color:var(--muted); padding:0;
+  }
+  .row-actions button:hover{border-color:var(--accent); color:var(--accent);}
+  .add-row-btn{
+    font-size:13px; font-weight:700; color:var(--accent); background:none; border:1.5px dashed var(--line);
+    border-radius:10px; padding:10px; width:100%; cursor:pointer; font-family:inherit;
+  }
+  .add-row-btn:hover{border-color:var(--accent);}
+
+  .guardrail-box{border:2px solid var(--gold); border-radius:14px; padding:16px; background:#FFF8EC; margin-bottom:20px;}
+  .guardrail-label{
+    font-size:11px; letter-spacing:.08em; text-transform:uppercase; font-weight:800;
+    color:var(--gold); margin-bottom:10px; display:block;
+  }
+  .guardrail-item{display:flex; align-items:flex-start; gap:8px; margin-bottom:8px; font-size:13.5px; line-height:1.4;}
+  .guardrail-item input{width:16px; height:16px; margin-top:2px; flex-shrink:0;}
+
+  .nav-row{display:flex; gap:10px; margin-top:8px;}
+  button.btn{
+    font-family:inherit; font-size:14px; font-weight:700; border:none;
+    border-radius:10px; padding:13px 18px; cursor:pointer; flex:1;
+  }
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-primary:disabled{background:#B9CFC8; cursor:not-allowed;}
+  .btn-ghost{background:transparent; color:var(--muted); border:1.5px solid var(--line);}
+  .btn-small{flex:none; padding:10px 14px; font-size:13px;}
+
+  .export-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:14px;}
+  .missing-list{font-size:13px; color:var(--danger); line-height:1.7; padding-left:18px;}
+  .review-summary{font-size:13px; color:var(--muted); max-height:320px; overflow-y:auto; white-space:pre-wrap; line-height:1.6; background:#F4F1EA; border-radius:10px; padding:14px; border:1px solid var(--line);}
+
+  .done-card{text-align:center;}
+  .done-icon{width:52px; height:52px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; margin:0 auto 14px;}
+
+  footer.foot{text-align:center; font-size:12px; color:var(--muted); margin-top:30px;}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Flex Fitness · Chatbot Configuration</div>
+    <h1>WhatsApp AI Knowledge &amp; Guardrails</h1>
+    <p>This questionnaire will be used to train and configure the gym's WhatsApp assistant. Please provide only information approved for communication with customers. The assistant will not publish information automatically until it has been reviewed and approved.</p>
+  </div>
+</header>
+
+<div class="wrap content">
+  <div class="card">
+    <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%;"></div></div>
+    <div class="progress-label">
+      <span id="progressLabel"></span>
+      <span class="draft-status" id="draftStatus"></span>
+    </div>
+  </div>
+
+  <div id="formArea"></div>
+</div>
+
+<footer class="foot wrap">Flex Fitness — Chatbot Knowledge Configuration</footer>
+
+<script src="whatsapp-knowledge-schema.js"></script>
+<script src="whatsapp-knowledge-logic.js"></script>
+<script>
+// ============================================================
+// SUPABASE CONFIG — same project as the discovery form
+// ============================================================
+const SUPABASE_URL = "https://tvdjrdsormftjzmghgtx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2ZGpyZHNvcm1mdGp6bWdoZ3R4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MjU5NzQsImV4cCI6MjEwMDUwMTk3NH0.U_NayJkuHuvZPr--LJ3EzfvjPrd9ha-564DEhbuqkBE";
+let supabaseClient = null;
+if(window.supabase){
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+const DRAFT_KEY = 'wa_knowledge_draft_v1';
+const TOTAL_STEPS = SECTIONS.length + 1; // + review step
+
+let currentStep = 0; // 0..SECTIONS.length-1 = sections, SECTIONS.length = review
+let answers = loadDraft();
+let sectionErrors = {};
+
+function defaultAnswers(){
+  const a = {};
+  SECTIONS.forEach(section => {
+    section.fields.forEach(field => {
+      if(field.type === 'table'){
+        a[field.id] = (field.rows || []).map(r => ({...r}));
+      } else if(field.type === 'guardrail-list'){
+        a[field.id] = (field.items || []).map(() => false);
+      }
+    });
+  });
+  return a;
+}
+
+function loadDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){ /* ignore corrupt draft */ }
+  return defaultAnswers();
+}
+
+let saveTimeout = null;
+function saveDraft(){
+  try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(answers)); }catch(e){}
+  const el = document.getElementById('draftStatus');
+  if(el){
+    el.textContent = 'Draft saved ' + new Date().toLocaleTimeString();
+    clearTimeout(saveTimeout);
+  }
+}
+function scheduleSave(){
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(saveDraft, 400);
+}
+
+function updateProgress(){
+  const pct = Math.round((currentStep / (TOTAL_STEPS - 1)) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  const label = currentStep < SECTIONS.length
+    ? `Section ${currentStep + 1} of ${SECTIONS.length}: ${SECTIONS[currentStep].title}`
+    : 'Final review';
+  document.getElementById('progressLabel').textContent = label;
+}
+
+function fieldValue(id){ return answers[id]; }
+function setFieldValue(id, value){ answers[id] = value; scheduleSave(); }
+
+function renderSimpleInput(field, value){
+  const id = 'f_' + field.id;
+  const errClass = sectionErrors[field.id] ? ' has-error' : '';
+  switch(field.type){
+    case 'textarea':
+      return `<textarea id="${id}" class="${errClass.trim()}" oninput="onFieldInput('${field.id}', this.value)">${escapeHtml(value || '')}</textarea>`;
+    case 'select': {
+      const opts = (field.options || []).map(o => `<option value="${escapeHtml(o)}" ${value===o?'selected':''}>${escapeHtml(o)}</option>`).join('');
+      return `<select id="${id}" class="${errClass.trim()}" onchange="onFieldInput('${field.id}', this.value)"><option value="">Select…</option>${opts}</select>`;
+    }
+    case 'boolean':
+      return `<div class="choice-row">
+        <button type="button" class="choice ${value===true?'selected':''}" onclick="onFieldInput('${field.id}', true)">Yes</button>
+        <button type="button" class="choice ${value===false?'selected':''}" onclick="onFieldInput('${field.id}', false)">No</button>
+      </div>`;
+    case 'file':
+      return `<input type="file" id="${id}" onchange="onFileInput('${field.id}', this)">
+        ${value && value.name ? `<div class="field-help">Selected: ${escapeHtml(value.name)}</div>` : ''}`;
+    case 'tel': case 'email': case 'url': case 'date': case 'number':
+      return `<input type="${field.type}" id="${id}" class="${errClass.trim()}" value="${escapeHtml(value || '')}" oninput="onFieldInput('${field.id}', this.value)">`;
+    default:
+      return `<input type="text" id="${id}" class="${errClass.trim()}" value="${escapeHtml(value || '')}" oninput="onFieldInput('${field.id}', this.value)">`;
+  }
+}
+
+function renderTableCell(fieldId, rowIndex, col, row){
+  const val = row[col.id];
+  if(col.locked){
+    return `<td class="locked-cell">${escapeHtml(val || '')}</td>`;
+  }
+  const onChange = `onTableCellInput('${fieldId}', ${rowIndex}, '${col.id}', this)`;
+  let inner;
+  switch(col.type){
+    case 'textarea':
+      inner = `<textarea oninput="${onChange}">${escapeHtml(val || '')}</textarea>`;
+      break;
+    case 'select': {
+      const opts = (col.options || []).map(o => `<option value="${escapeHtml(o)}" ${val===o?'selected':''}>${escapeHtml(o)}</option>`).join('');
+      inner = `<select onchange="${onChange}"><option value="">–</option>${opts}</select>`;
+      break;
+    }
+    case 'boolean':
+      inner = `<select onchange="${onChange}">
+        <option value="">–</option>
+        <option value="true" ${val===true?'selected':''}>Yes</option>
+        <option value="false" ${val===false?'selected':''}>No</option>
+      </select>`;
+      break;
+    case 'date':
+      inner = `<input type="date" value="${escapeHtml(val || '')}" oninput="${onChange}">`;
+      break;
+    case 'number':
+      inner = `<input type="number" value="${escapeHtml(val || '')}" oninput="${onChange}">`;
+      break;
+    default:
+      inner = `<input type="text" value="${escapeHtml(val || '')}" oninput="${onChange}">`;
+  }
+  return `<td>${inner}</td>`;
+}
+
+function renderTableField(field){
+  const rows = answers[field.id] || [];
+  const header = field.columns.map(c => `<th>${escapeHtml(c.label)}</th>`).join('')
+    + (field.repeatable ? '<th></th>' : '');
+  const body = rows.map((row, i) => {
+    const cells = field.columns.map(col => renderTableCell(field.id, i, col, row)).join('');
+    const actions = field.repeatable ? `<td class="row-actions">
+        <button type="button" title="Move up" onclick="moveTableRow('${field.id}', ${i}, -1)">↑</button>
+        <button type="button" title="Move down" onclick="moveTableRow('${field.id}', ${i}, 1)">↓</button>
+        <button type="button" title="Delete" onclick="deleteTableRow('${field.id}', ${i})">✕</button>
+      </td>` : '';
+    return `<tr>${cells}${actions}</tr>`;
+  }).join('');
+  const addBtn = field.repeatable ? `<button type="button" class="add-row-btn" onclick="addTableRow('${field.id}')">+ Add row</button>` : '';
+  return `<div class="table-scroll"><table class="kv"><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table></div>${addBtn}`;
+}
+
+function renderGuardrailList(field){
+  const value = answers[field.id] || [];
+  const items = (field.items || []).map((item, i) => `
+    <div class="guardrail-item">
+      <input type="checkbox" ${value[i] ? 'checked' : ''} onchange="onGuardrailToggle('${field.id}', ${i}, this.checked)">
+      <span>${escapeHtml(item)}</span>
+    </div>`).join('');
+  return `<div class="guardrail-box">
+    <span class="guardrail-label">Mandatory — confirm each guardrail</span>
+    ${items}
+  </div>`;
+}
+
+function renderField(field){
+  if(!KnowledgeLogic.isFieldVisible(field, answers)) return '';
+  const error = sectionErrors[field.id];
+  if(field.type === 'guardrail-list'){
+    return `<div class="field-group">${renderGuardrailList(field)}${error ? `<div class="field-error">${escapeHtml(error)}</div>` : ''}</div>`;
+  }
+  if(field.type === 'table'){
+    return `<div class="field-group">
+      <label class="field-label">${escapeHtml(field.label)}</label>
+      ${renderTableField(field)}
+      ${error ? `<div class="field-error">${escapeHtml(error)}</div>` : ''}
+    </div>`;
+  }
+  return `<div class="field-group">
+    <label class="field-label">${escapeHtml(field.label)}${field.required ? ' <span class="required-mark">*</span>' : ''}</label>
+    ${field.help ? `<div class="field-help">${escapeHtml(field.help)}</div>` : ''}
+    ${renderSimpleInput(field, answers[field.id])}
+    ${error ? `<div class="field-error">${escapeHtml(error)}</div>` : ''}
+  </div>`;
+}
+
+function renderSection(section){
+  const fieldsHtml = section.fields.map(renderField).join('');
+  return `<div class="card">
+    <div class="section-title">${escapeHtml(section.title)}</div>
+    ${section.intro ? `<div class="section-intro">${escapeHtml(section.intro)}</div>` : ''}
+    ${fieldsHtml}
+  </div>
+  <div class="nav-row">
+    <button class="btn btn-ghost" ${currentStep === 0 ? 'disabled' : ''} onclick="prevStep()">Back</button>
+    <button class="btn btn-primary" onclick="nextStep()">${currentStep === SECTIONS.length - 1 ? 'Review' : 'Next'}</button>
+  </div>`;
+}
+
+function renderReview(){
+  const result = KnowledgeLogic.validateAll(SECTIONS, answers);
+  const missing = KnowledgeLogic.buildOutputs(SECTIONS, answers).missingInformationReport;
+  const approved = answers.__ownerApproved === true;
+
+  const missingHtml = missing.length
+    ? `<div class="card"><div class="section-title">Missing or incomplete</div><ul class="missing-list">${missing.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul></div>`
+    : '';
+
+  return `
+  <div class="card">
+    <div class="section-title">Final Review</div>
+    <div class="section-intro">Review everything below before approving. You can go back to any section to make changes.</div>
+    <div class="review-summary">${escapeHtml(KnowledgeLogic.toMarkdown(SECTIONS, answers))}</div>
+  </div>
+  ${missingHtml}
+  <div class="card">
+    <label class="field-label" style="display:flex; align-items:flex-start; gap:10px;">
+      <input type="checkbox" style="width:18px;height:18px;margin-top:2px;" ${approved ? 'checked' : ''} onchange="onApprovalToggle(this.checked)">
+      <span>I, as the gym owner, confirm this information is accurate and approved for use by the WhatsApp AI assistant.</span>
+    </label>
+    <div class="nav-row" style="margin-top:14px;">
+      <button class="btn btn-ghost" onclick="prevStep()">Back</button>
+      <button class="btn btn-primary" id="submitBtn" ${(!approved || result.hasErrors) ? 'disabled' : ''} onclick="submitQuestionnaire()">Submit</button>
+    </div>
+    <div class="export-row">
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('json')">Download JSON</button>
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('csv')">Download FAQ CSV</button>
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('markdown')">Download Markdown</button>
+    </div>
+  </div>`;
+}
+
+function renderDone(){
+  return `<div class="card done-card">
+    <div class="done-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+    <div class="section-title">Submitted</div>
+    <p style="color:var(--muted); font-size:14px;">Thanks — this configuration has been recorded and is ready for review before it's used to set up the WhatsApp assistant.</p>
+    <div class="export-row" style="justify-content:center;">
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('json')">Download JSON</button>
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('csv')">Download FAQ CSV</button>
+      <button class="btn btn-ghost btn-small" onclick="downloadExport('markdown')">Download Markdown</button>
+    </div>
+  </div>`;
+}
+
+function render(){
+  updateProgress();
+  const area = document.getElementById('formArea');
+  if(currentStep < SECTIONS.length){
+    area.innerHTML = renderSection(SECTIONS[currentStep]);
+  } else if(currentStep === SECTIONS.length){
+    area.innerHTML = renderReview();
+  } else {
+    area.innerHTML = renderDone();
+  }
+  window.scrollTo(0,0);
+}
+
+// ---- event handlers ----
+function onFieldInput(fieldId, value){
+  setFieldValue(fieldId, value);
+  if(sectionErrors[fieldId]){ delete sectionErrors[fieldId]; render(); }
+}
+function onFileInput(fieldId, input){
+  const file = input.files[0];
+  setFieldValue(fieldId, file ? { name: file.name, size: file.size, type: file.type } : null);
+}
+function onGuardrailToggle(fieldId, index, checked){
+  const arr = (answers[fieldId] || []).slice();
+  arr[index] = checked;
+  setFieldValue(fieldId, arr);
+}
+function onApprovalToggle(checked){
+  answers.__ownerApproved = checked;
+  scheduleSave();
+  render();
+}
+function onTableCellInput(fieldId, rowIndex, colId, input){
+  const rows = (answers[fieldId] || []).slice();
+  let value = input.value;
+  if(input.tagName === 'SELECT' && (value === 'true' || value === 'false')) value = value === 'true';
+  rows[rowIndex] = { ...rows[rowIndex], [colId]: value };
+  answers[fieldId] = rows;
+  scheduleSave();
+}
+function addTableRow(fieldId){
+  const rows = (answers[fieldId] || []).slice();
+  rows.push({});
+  answers[fieldId] = rows;
+  scheduleSave();
+  render();
+}
+function deleteTableRow(fieldId, index){
+  const rows = (answers[fieldId] || []).slice();
+  rows.splice(index, 1);
+  answers[fieldId] = rows;
+  scheduleSave();
+  render();
+}
+function moveTableRow(fieldId, index, dir){
+  const rows = (answers[fieldId] || []).slice();
+  const target = index + dir;
+  if(target < 0 || target >= rows.length) return;
+  [rows[index], rows[target]] = [rows[target], rows[index]];
+  answers[fieldId] = rows;
+  scheduleSave();
+  render();
+}
+
+function nextStep(){
+  const section = SECTIONS[currentStep];
+  sectionErrors = KnowledgeLogic.validateSection(section, answers);
+  if(Object.keys(sectionErrors).length > 0){ render(); return; }
+  currentStep++;
+  render();
+}
+function prevStep(){
+  currentStep--;
+  sectionErrors = {};
+  render();
+}
+
+async function submitQuestionnaire(){
+  const outputs = KnowledgeLogic.buildOutputs(SECTIONS, answers);
+  const btn = document.getElementById('submitBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Submitting…'; }
+
+  if(supabaseClient){
+    try{
+      const { error } = await supabaseClient.from('chatbot_knowledge_responses').insert({
+        gym_name: answers.gymName || null,
+        answers: answers,
+        outputs: outputs,
+        approved: true,
+        approved_by: answers.finalApprover || null,
+        submitted_at: new Date().toISOString(),
+      });
+      if(error) console.error('Supabase submit failed:', error);
+    }catch(err){
+      console.error('Supabase submit failed:', err);
+    }
+  }
+
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  currentStep = SECTIONS.length + 1;
+  render();
+}
+
+function downloadExport(kind){
+  const outputs = KnowledgeLogic.buildOutputs(SECTIONS, answers);
+  let content, filename, mime;
+  if(kind === 'json'){
+    content = JSON.stringify(outputs, null, 2);
+    filename = 'whatsapp-knowledge.json';
+    mime = 'application/json';
+  } else if(kind === 'csv'){
+    const faqSection = SECTIONS.find(s => s.id === 'faq');
+    const faqField = faqSection.fields[0];
+    content = KnowledgeLogic.toCSV(answers.faqTable || [], faqField.columns);
+    filename = 'whatsapp-knowledge-faq.csv';
+    mime = 'text/csv';
+  } else {
+    content = KnowledgeLogic.toMarkdown(SECTIONS, answers);
+    filename = 'whatsapp-knowledge.md';
+    mime = 'text/markdown';
+  }
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str === undefined || str === null ? '' : String(str);
+  return div.innerHTML;
+}
+
+render();
+</script>
+
+</body>
+</html>

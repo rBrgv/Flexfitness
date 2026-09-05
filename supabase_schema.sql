@@ -64,3 +64,50 @@ $$;
 
 -- Allow the anon key to call this function (the function itself enforces the password)
 grant execute on function get_discovery_responses(text) to anon;
+
+-- ============================================================
+-- WhatsApp AI Knowledge & Guardrails — second-stage questionnaire
+-- (whatsapp-knowledge.html). One row per owner-approved submission.
+-- Draft-in-progress state lives in the browser's localStorage, not here —
+-- this table only receives the final, one-time, owner-approved submission,
+-- so it can reuse the same insert-only RLS pattern as discovery_responses
+-- (no update permission needed for anon).
+-- ============================================================
+
+create table if not exists chatbot_knowledge_responses (
+  id uuid primary key default gen_random_uuid(),
+  gym_name text,
+  answers jsonb not null,       -- full raw questionnaire answers, keyed by field id
+  outputs jsonb not null,       -- pre-computed structured outputs (FAQ KB, guardrails, escalation matrix, etc.)
+  approved boolean not null default false,
+  approved_by text,             -- "Who gives final approval" answer
+  submitted_at timestamptz not null default now()
+);
+
+create index if not exists idx_knowledge_submitted on chatbot_knowledge_responses(submitted_at desc);
+
+alter table chatbot_knowledge_responses enable row level security;
+
+drop policy if exists "Anyone can submit chatbot knowledge" on chatbot_knowledge_responses;
+create policy "Anyone can submit chatbot knowledge"
+  on chatbot_knowledge_responses
+  for insert
+  to anon
+  with check (true);
+
+-- Same password-gated read pattern as discovery responses.
+create or replace function get_knowledge_responses(input_password text)
+returns setof chatbot_knowledge_responses
+language plpgsql
+security definer
+as $$
+begin
+  if input_password != 'flexfitness2026' then
+    raise exception 'Incorrect password';
+  end if;
+
+  return query select * from chatbot_knowledge_responses order by submitted_at desc;
+end;
+$$;
+
+grant execute on function get_knowledge_responses(text) to anon;
