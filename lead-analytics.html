@@ -163,6 +163,7 @@
     <button class="tab-btn active" id="tabLeadsBtn">Leads</button>
     <button class="tab-btn" id="tabMembersBtn">Members</button>
     <button class="tab-btn" id="tabTrainersBtn">Trainers</button>
+    <button class="tab-btn" id="tabClassesBtn">Classes</button>
   </div>
 
   <div id="leadsPanel">
@@ -186,6 +187,13 @@
     <div id="trainersList"></div>
   </div>
 
+  <div id="classesPanel" style="display:none;">
+    <div class="stats-row" id="classStatsRow"></div>
+    <button class="small-btn" id="addClassBtn" style="margin-bottom:14px; width:auto;">+ Add class</button>
+    <div class="add-member-form" id="addClassForm"></div>
+    <div id="classesList"></div>
+  </div>
+
   <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
@@ -195,7 +203,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let supabaseClient = null;
 let sessionPassword = null;
-let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], recent_messages: [] };
+let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], classes: [], recent_messages: [] };
 let activeFilter = 'all';
 let openLeadId = null;
 let convertOpenLeadId = null;
@@ -206,6 +214,8 @@ let renewOpenMemberId = null;
 let addMemberFormOpen = false;
 let addTrainerFormOpen = false;
 let editTrainerId = null;
+let addClassFormOpen = false;
+let editClassId = null;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -233,18 +243,32 @@ function switchTab(tab){
   document.getElementById('leadsPanel').style.display = tab === 'leads' ? 'block' : 'none';
   document.getElementById('membersPanel').style.display = tab === 'members' ? 'block' : 'none';
   document.getElementById('trainersPanel').style.display = tab === 'trainers' ? 'block' : 'none';
+  document.getElementById('classesPanel').style.display = tab === 'classes' ? 'block' : 'none';
   document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
   document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
   document.getElementById('tabTrainersBtn').className = 'tab-btn' + (tab === 'trainers' ? ' active' : '');
+  document.getElementById('tabClassesBtn').className = 'tab-btn' + (tab === 'classes' ? ' active' : '');
 }
 document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
 document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
 document.getElementById('tabTrainersBtn').onclick = () => switchTab('trainers');
+document.getElementById('tabClassesBtn').onclick = () => switchTab('classes');
 
 function renderDash(){
   renderLeadsPanel();
   renderMembersPanel();
   renderTrainersPanel();
+  renderClassesPanel();
+}
+
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+function formatTime(t){
+  if(!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2,'0')} ${period}`;
 }
 
 function refreshAnalytics(){
@@ -846,6 +870,185 @@ function renderTrainersPanel(){
       }).then(({ error }) => {
         if(!error){
           editTrainerId = null;
+          refreshAnalytics().then(renderDash);
+        }
+      });
+    };
+
+    list.appendChild(card);
+  });
+}
+
+function renderClassesPanel(){
+  const classes = analytics.classes || [];
+  const activeCount = classes.filter(c => c.active).length;
+
+  document.getElementById('classStatsRow').innerHTML = `
+    <div class="stat"><b>${classes.length}</b>Total classes</div>
+    <div class="stat"><b>${activeCount}</b>Active</div>
+  `;
+
+  const activeTrainers = (analytics.trainers || []).filter(t => t.active);
+  document.getElementById('addClassBtn').onclick = () => { addClassFormOpen = !addClassFormOpen; editClassId = null; renderClassesPanel(); };
+
+  const formEl = document.getElementById('addClassForm');
+  formEl.className = 'add-member-form' + (addClassFormOpen ? ' open' : '');
+  formEl.innerHTML = `
+    <div class="full"><label>Class name</label><input type="text" id="addClassName" placeholder="e.g. Morning Yoga"></div>
+    <div>
+      <label>Trainer</label>
+      <select id="addClassTrainer">
+        <option value="">Unassigned</option>
+        ${activeTrainers.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label>Day</label>
+      <select id="addClassDay">
+        ${DAY_NAMES.map((d, i) => `<option value="${i}">${d}</option>`).join('')}
+      </select>
+    </div>
+    <div><label>Start time</label><input type="time" id="addClassStart" value="07:00"></div>
+    <div><label>End time</label><input type="time" id="addClassEnd" value="08:00"></div>
+    <div class="full"><label>Capacity</label><input type="number" id="addClassCapacity" value="20" min="1"></div>
+    <div class="full"><div class="action-error" id="addClassError"></div><button class="small-btn" id="confirmAddClassBtn">Add class</button></div>
+  `;
+  if(addClassFormOpen){
+    document.getElementById('confirmAddClassBtn').onclick = () => {
+      const name = document.getElementById('addClassName').value.trim();
+      const trainerId = document.getElementById('addClassTrainer').value || null;
+      const day = parseInt(document.getElementById('addClassDay').value, 10);
+      const start = document.getElementById('addClassStart').value;
+      const end = document.getElementById('addClassEnd').value;
+      const capacity = parseInt(document.getElementById('addClassCapacity').value, 10);
+      const errEl = document.getElementById('addClassError');
+      if(!name || !start || !end || !capacity){
+        errEl.textContent = 'All fields except trainer are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('confirmAddClassBtn');
+      btn.disabled = true;
+      supabaseClient.rpc('add_class', {
+        input_password: sessionPassword, class_name: name, trainer_id_input: trainerId,
+        day_of_week_input: day, start_time_input: start, end_time_input: end, capacity_input: capacity
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = error.message.includes('End time') ? error.message : 'Could not add class — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        addClassFormOpen = false;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
+
+  const list = document.getElementById('classesList');
+  if(classes.length === 0){
+    list.innerHTML = '<div class="empty-state">No classes scheduled yet.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  classes.forEach(c => {
+    const card = document.createElement('div');
+    const editing = editClassId === c.id;
+    card.className = 'lead-card' + (editing ? ' open' : '');
+
+    const editHtml = `
+      <div class="add-member-form open">
+        <div class="full"><label>Class name</label><input type="text" class="edit-name" value="${escapeHtml(c.name)}"></div>
+        <div>
+          <label>Trainer</label>
+          <select class="edit-trainer">
+            <option value="">Unassigned</option>
+            ${activeTrainers.map(t => `<option value="${t.id}" ${t.id === c.trainer_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Day</label>
+          <select class="edit-day">
+            ${DAY_NAMES.map((d, i) => `<option value="${i}" ${i === c.day_of_week ? 'selected' : ''}>${d}</option>`).join('')}
+          </select>
+        </div>
+        <div><label>Start time</label><input type="time" class="edit-start" value="${c.start_time.slice(0,5)}"></div>
+        <div><label>End time</label><input type="time" class="edit-end" value="${c.end_time.slice(0,5)}"></div>
+        <div><label>Capacity</label><input type="number" class="edit-capacity" value="${c.capacity}" min="1"></div>
+        <div class="full">
+          <div class="action-error"></div>
+          <button class="small-btn save-class-btn">Save</button>
+          <button class="small-btn" style="background:${c.active ? 'var(--muted)' : 'var(--accent)'};" data-toggle="${c.active}">${c.active ? 'Deactivate' : 'Reactivate'}</button>
+        </div>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="lead-row">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(c.name)}</span>
+          <span class="lead-phone">${DAY_NAMES[c.day_of_week]} · ${formatTime(c.start_time)}–${formatTime(c.end_time)}</span>
+        </div>
+        <div class="lead-meta">
+          <span>${c.trainer_name ? escapeHtml(c.trainer_name) : 'Unassigned'} · cap ${c.capacity}</span>
+          <span class="status-pill status-${c.active ? 'active' : 'cancelled'}">${c.active ? 'Active' : 'Inactive'}</span>
+          <span class="chevron">▶</span>
+        </div>
+      </div>
+      <div class="thread">${editHtml}</div>
+    `;
+
+    card.querySelector('.lead-row').onclick = () => {
+      editClassId = editing ? null : c.id;
+      renderClassesPanel();
+    };
+
+    card.querySelector('.save-class-btn').onclick = (e) => {
+      e.stopPropagation();
+      const name = card.querySelector('.edit-name').value.trim();
+      const trainerId = card.querySelector('.edit-trainer').value || null;
+      const day = parseInt(card.querySelector('.edit-day').value, 10);
+      const start = card.querySelector('.edit-start').value;
+      const end = card.querySelector('.edit-end').value;
+      const capacity = parseInt(card.querySelector('.edit-capacity').value, 10);
+      const errEl = card.querySelector('.action-error');
+      if(!name || !start || !end || !capacity){
+        errEl.textContent = 'All fields except trainer are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = card.querySelector('.save-class-btn');
+      btn.disabled = true;
+      supabaseClient.rpc('update_class', {
+        input_password: sessionPassword, class_id_input: c.id, class_name: name,
+        trainer_id_input: trainerId, day_of_week_input: day, start_time_input: start,
+        end_time_input: end, capacity_input: capacity, class_active: c.active
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = error.message.includes('End time') ? error.message : 'Could not save — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        editClassId = null;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+
+    const toggleBtn = card.querySelector('[data-toggle]');
+    toggleBtn.onclick = (e) => {
+      e.stopPropagation();
+      const wasActive = toggleBtn.dataset.toggle === 'true';
+      toggleBtn.disabled = true;
+      supabaseClient.rpc('update_class', {
+        input_password: sessionPassword, class_id_input: c.id, class_name: c.name,
+        trainer_id_input: c.trainer_id, day_of_week_input: c.day_of_week,
+        start_time_input: c.start_time, end_time_input: c.end_time,
+        capacity_input: c.capacity, class_active: !wasActive
+      }).then(({ error }) => {
+        if(!error){
+          editClassId = null;
           refreshAnalytics().then(renderDash);
         }
       });
