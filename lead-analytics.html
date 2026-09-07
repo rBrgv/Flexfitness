@@ -164,6 +164,7 @@
     <button class="tab-btn" id="tabMembersBtn">Members</button>
     <button class="tab-btn" id="tabTrainersBtn">Trainers</button>
     <button class="tab-btn" id="tabClassesBtn">Classes</button>
+    <button class="tab-btn" id="tabBookingsBtn">Bookings</button>
   </div>
 
   <div id="leadsPanel">
@@ -194,6 +195,13 @@
     <div id="classesList"></div>
   </div>
 
+  <div id="bookingsPanel" style="display:none;">
+    <div class="stats-row" id="bookingStatsRow"></div>
+    <button class="small-btn" id="addBookingBtn" style="margin-bottom:14px; width:auto;">+ Book a member into a class</button>
+    <div class="add-member-form" id="addBookingForm"></div>
+    <div id="bookingsList"></div>
+  </div>
+
   <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
@@ -203,7 +211,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let supabaseClient = null;
 let sessionPassword = null;
-let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], classes: [], recent_messages: [] };
+let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], classes: [], bookings: [], recent_messages: [] };
 let activeFilter = 'all';
 let openLeadId = null;
 let convertOpenLeadId = null;
@@ -216,6 +224,8 @@ let addTrainerFormOpen = false;
 let editTrainerId = null;
 let addClassFormOpen = false;
 let editClassId = null;
+let addBookingFormOpen = false;
+let bookingFilter = 'upcoming';
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -244,21 +254,25 @@ function switchTab(tab){
   document.getElementById('membersPanel').style.display = tab === 'members' ? 'block' : 'none';
   document.getElementById('trainersPanel').style.display = tab === 'trainers' ? 'block' : 'none';
   document.getElementById('classesPanel').style.display = tab === 'classes' ? 'block' : 'none';
+  document.getElementById('bookingsPanel').style.display = tab === 'bookings' ? 'block' : 'none';
   document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
   document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
   document.getElementById('tabTrainersBtn').className = 'tab-btn' + (tab === 'trainers' ? ' active' : '');
   document.getElementById('tabClassesBtn').className = 'tab-btn' + (tab === 'classes' ? ' active' : '');
+  document.getElementById('tabBookingsBtn').className = 'tab-btn' + (tab === 'bookings' ? ' active' : '');
 }
 document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
 document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
 document.getElementById('tabTrainersBtn').onclick = () => switchTab('trainers');
 document.getElementById('tabClassesBtn').onclick = () => switchTab('classes');
+document.getElementById('tabBookingsBtn').onclick = () => switchTab('bookings');
 
 function renderDash(){
   renderLeadsPanel();
   renderMembersPanel();
   renderTrainersPanel();
   renderClassesPanel();
+  renderBookingsPanel();
 }
 
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -1055,6 +1069,118 @@ function renderClassesPanel(){
     };
 
     list.appendChild(card);
+  });
+}
+
+function renderBookingsPanel(){
+  const bookings = analytics.bookings || [];
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = bookings.filter(b => b.class_date === today).length;
+
+  document.getElementById('bookingStatsRow').innerHTML = `
+    <div class="stat"><b>${bookings.length}</b>Upcoming (14d)</div>
+    <div class="stat"><b>${todayCount}</b>Today</div>
+  `;
+
+  const activeMembers = (analytics.members || []).filter(m => m.status === 'active');
+  const activeClasses = (analytics.classes || []).filter(c => c.active);
+
+  document.getElementById('addBookingBtn').onclick = () => { addBookingFormOpen = !addBookingFormOpen; renderBookingsPanel(); };
+
+  const formEl = document.getElementById('addBookingForm');
+  formEl.className = 'add-member-form' + (addBookingFormOpen ? ' open' : '');
+  formEl.innerHTML = `
+    <div>
+      <label>Member</label>
+      <select id="bookMember">
+        ${activeMembers.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.phone)})</option>`).join('')}
+      </select>
+    </div>
+    <div>
+      <label>Class</label>
+      <select id="bookClass">
+        ${activeClasses.map(c => `<option value="${c.id}">${escapeHtml(c.name)} — ${DAY_NAMES[c.day_of_week]} ${formatTime(c.start_time)}</option>`).join('')}
+      </select>
+    </div>
+    <div class="full"><label>Date</label><input type="date" id="bookDate" value="${today}"></div>
+    <div class="full"><div class="action-error" id="addBookingError"></div><button class="small-btn" id="confirmBookBtn">Book</button></div>
+  `;
+  if(addBookingFormOpen){
+    if(activeMembers.length === 0 || activeClasses.length === 0){
+      formEl.innerHTML = `<div class="full" style="color:var(--muted); font-size:13px;">Need at least one active member and one active class to book.</div>`;
+    } else {
+      document.getElementById('confirmBookBtn').onclick = () => {
+        const memberId = document.getElementById('bookMember').value;
+        const classId = document.getElementById('bookClass').value;
+        const date = document.getElementById('bookDate').value;
+        const errEl = document.getElementById('addBookingError');
+        const btn = document.getElementById('confirmBookBtn');
+        btn.disabled = true;
+        supabaseClient.rpc('admin_book_class', {
+          input_password: sessionPassword, class_id_input: classId, member_id_input: memberId, class_date_input: date
+        }).then(({ error }) => {
+          if(error){
+            errEl.textContent = error.message.includes('full') ? 'That class is full for that date.'
+              : error.message.includes('duplicate') ? 'Already booked for that class and date.'
+              : 'Could not book — please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            return;
+          }
+          addBookingFormOpen = false;
+          refreshAnalytics().then(renderDash);
+        });
+      };
+    }
+  }
+
+  const list = document.getElementById('bookingsList');
+  if(bookings.length === 0){
+    list.innerHTML = '<div class="empty-state">No bookings in the next 14 days.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  bookings.forEach(b => {
+    const row = document.createElement('div');
+    row.className = 'lead-card';
+    const dateStr = new Date(b.class_date).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+    const isToday = b.class_date === today;
+
+    row.innerHTML = `
+      <div class="lead-row" style="cursor:default;">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(b.member_name)}</span>
+          <span class="lead-phone">${escapeHtml(b.class_name)} · ${formatTime(b.start_time)}–${formatTime(b.end_time)}</span>
+        </div>
+        <div class="lead-meta">
+          <span class="status-pill ${isToday ? 'status-expiring' : 'status-active'}">${dateStr}</span>
+          <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted); cursor:pointer;">
+            <input type="checkbox" class="attended-check" ${b.attended ? 'checked' : ''}> Attended
+          </label>
+          <button class="small-btn cancel-booking-btn" style="background:var(--red);">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    row.querySelector('.attended-check').onchange = (e) => {
+      supabaseClient.rpc('mark_attendance', {
+        input_password: sessionPassword, booking_id_input: b.id, attended_input: e.target.checked
+      }).then(({ error }) => {
+        if(error) refreshAnalytics().then(renderDash);
+      });
+    };
+
+    row.querySelector('.cancel-booking-btn').onclick = () => {
+      if(!confirm(`Cancel ${b.member_name}'s booking for ${b.class_name} on ${dateStr}?`)) return;
+      supabaseClient.rpc('cancel_booking_admin', {
+        input_password: sessionPassword, booking_id_input: b.id
+      }).then(({ error }) => {
+        if(!error) refreshAnalytics().then(renderDash);
+      });
+    };
+
+    list.appendChild(row);
   });
 }
 
