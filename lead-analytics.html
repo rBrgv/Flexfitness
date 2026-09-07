@@ -162,6 +162,7 @@
   <div class="tabs">
     <button class="tab-btn active" id="tabLeadsBtn">Leads</button>
     <button class="tab-btn" id="tabMembersBtn">Members</button>
+    <button class="tab-btn" id="tabTrainersBtn">Trainers</button>
   </div>
 
   <div id="leadsPanel">
@@ -178,6 +179,13 @@
     <div id="membersList"></div>
   </div>
 
+  <div id="trainersPanel" style="display:none;">
+    <div class="stats-row" id="trainerStatsRow"></div>
+    <button class="small-btn" id="addTrainerBtn" style="margin-bottom:14px; width:auto;">+ Add trainer</button>
+    <div class="add-member-form" id="addTrainerForm"></div>
+    <div id="trainersList"></div>
+  </div>
+
   <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
@@ -187,7 +195,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let supabaseClient = null;
 let sessionPassword = null;
-let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], recent_messages: [] };
+let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], recent_messages: [] };
 let activeFilter = 'all';
 let openLeadId = null;
 let convertOpenLeadId = null;
@@ -196,6 +204,8 @@ let memberFilter = 'all';
 let openMemberId = null;
 let renewOpenMemberId = null;
 let addMemberFormOpen = false;
+let addTrainerFormOpen = false;
+let editTrainerId = null;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -222,15 +232,19 @@ function switchTab(tab){
   activeTab = tab;
   document.getElementById('leadsPanel').style.display = tab === 'leads' ? 'block' : 'none';
   document.getElementById('membersPanel').style.display = tab === 'members' ? 'block' : 'none';
+  document.getElementById('trainersPanel').style.display = tab === 'trainers' ? 'block' : 'none';
   document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
   document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
+  document.getElementById('tabTrainersBtn').className = 'tab-btn' + (tab === 'trainers' ? ' active' : '');
 }
 document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
 document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
+document.getElementById('tabTrainersBtn').onclick = () => switchTab('trainers');
 
 function renderDash(){
   renderLeadsPanel();
   renderMembersPanel();
+  renderTrainersPanel();
 }
 
 function refreshAnalytics(){
@@ -570,6 +584,7 @@ function renderMembersPanel(){
       ? m.plan_end_date
       : new Date().toISOString().slice(0,10);
 
+    const activeTrainers = (analytics.trainers || []).filter(t => t.active);
     const actionsHtml = `
       <div class="actions">
         <span style="font-size:12px; color:var(--muted);">Joined ${joinedStr}</span>
@@ -580,6 +595,14 @@ function renderMembersPanel(){
         ${m.status !== 'cancelled'
           ? '<button class="small-btn cancel-btn" style="background:var(--red);">Cancel</button>'
           : ''}
+      </div>
+      <div class="actions" style="border-top:none; margin-top:0; padding-top:0;">
+        <span style="font-size:12px; color:var(--muted);">Trainer:</span>
+        <select class="trainer-select">
+          <option value="">Unassigned</option>
+          ${activeTrainers.map(t => `<option value="${t.id}" ${t.id === m.trainer_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
+        </select>
+        <button class="small-btn secondary assign-trainer-btn">Assign</button>
       </div>
       <div class="action-error"></div>
       <div class="convert-form${renewOpen ? ' open' : ''}">
@@ -608,7 +631,7 @@ function renderMembersPanel(){
         <div class="lead-meta">
           <span class="expiry-badge ${dispStatus === 'expired' ? 'urgent' : dispStatus === 'expiring' ? 'soon' : ''}">${escapeHtml(daysLeftLabel(m))}</span>
           <span class="status-pill status-${dispStatus}">${MEMBER_STATUS_LABELS[dispStatus]}</span>
-          <span>${escapeHtml(m.membership_plan || '')} · exp ${expiryStr}</span>
+          <span>${escapeHtml(m.membership_plan || '')} · exp ${expiryStr}${m.trainer_name ? ' · ' + escapeHtml(m.trainer_name) : ''}</span>
           <span class="chevron">▶</span>
         </div>
       </div>
@@ -661,6 +684,171 @@ function renderMembersPanel(){
     if(cancelBtn) cancelBtn.onclick = (e) => {
       e.stopPropagation();
       if(confirm(`Cancel membership for ${m.name}?`)) setMemberStatus(m.id, 'cancelled');
+    };
+
+    card.querySelector('.assign-trainer-btn').onclick = (e) => {
+      e.stopPropagation();
+      const trainerId = card.querySelector('.trainer-select').value || null;
+      const btn = card.querySelector('.assign-trainer-btn');
+      btn.disabled = true;
+      supabaseClient.rpc('assign_trainer', {
+        input_password: sessionPassword, member_id_input: m.id, trainer_id_input: trainerId
+      }).then(({ error }) => {
+        if(error){
+          const errEl = card.querySelector('.action-error');
+          errEl.textContent = 'Could not assign trainer — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        refreshAnalytics().then(renderDash);
+      });
+    };
+
+    list.appendChild(card);
+  });
+}
+
+function renderTrainersPanel(){
+  const trainers = analytics.trainers || [];
+  const activeCount = trainers.filter(t => t.active).length;
+
+  document.getElementById('trainerStatsRow').innerHTML = `
+    <div class="stat"><b>${trainers.length}</b>Total trainers</div>
+    <div class="stat"><b>${activeCount}</b>Active</div>
+    <div class="stat"><b>${trainers.length - activeCount}</b>Inactive</div>
+  `;
+
+  document.getElementById('addTrainerBtn').onclick = () => { addTrainerFormOpen = !addTrainerFormOpen; editTrainerId = null; renderTrainersPanel(); };
+
+  const formEl = document.getElementById('addTrainerForm');
+  formEl.className = 'add-member-form' + (addTrainerFormOpen ? ' open' : '');
+  formEl.innerHTML = `
+    <div class="full"><label>Name</label><input type="text" id="addTrainerName" placeholder="Full name"></div>
+    <div><label>Phone (optional)</label><input type="text" id="addTrainerPhone" placeholder="919XXXXXXXXX"></div>
+    <div><label>Specialization</label><input type="text" id="addTrainerSpec" placeholder="e.g. Strength & conditioning"></div>
+    <div class="full"><label>Bio</label><input type="text" id="addTrainerBio" placeholder="Short bio"></div>
+    <div class="full"><div class="action-error" id="addTrainerError"></div><button class="small-btn" id="confirmAddTrainerBtn">Add trainer</button></div>
+  `;
+  if(addTrainerFormOpen){
+    document.getElementById('confirmAddTrainerBtn').onclick = () => {
+      const name = document.getElementById('addTrainerName').value.trim();
+      const phone = document.getElementById('addTrainerPhone').value.trim();
+      const spec = document.getElementById('addTrainerSpec').value.trim();
+      const bio = document.getElementById('addTrainerBio').value.trim();
+      const errEl = document.getElementById('addTrainerError');
+      if(!name){
+        errEl.textContent = 'Trainer name is required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('confirmAddTrainerBtn');
+      btn.disabled = true;
+      supabaseClient.rpc('add_trainer', {
+        input_password: sessionPassword, trainer_name: name, trainer_phone: phone,
+        trainer_specialization: spec, trainer_bio: bio
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = 'Could not add trainer — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        addTrainerFormOpen = false;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
+
+  const list = document.getElementById('trainersList');
+  if(trainers.length === 0){
+    list.innerHTML = '<div class="empty-state">No trainers added yet.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  trainers.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'lead-card' + (editTrainerId === t.id ? ' open' : '');
+
+    const editing = editTrainerId === t.id;
+    const editHtml = `
+      <div class="add-member-form open">
+        <div class="full"><label>Name</label><input type="text" class="edit-name" value="${escapeHtml(t.name)}"></div>
+        <div><label>Phone</label><input type="text" class="edit-phone" value="${escapeHtml(t.phone || '')}"></div>
+        <div><label>Specialization</label><input type="text" class="edit-spec" value="${escapeHtml(t.specialization || '')}"></div>
+        <div class="full"><label>Bio</label><input type="text" class="edit-bio" value="${escapeHtml(t.bio || '')}"></div>
+        <div class="full">
+          <div class="action-error"></div>
+          <button class="small-btn save-trainer-btn">Save</button>
+          <button class="small-btn ${t.active ? '' : 'secondary'}" style="background:${t.active ? 'var(--muted)' : 'var(--accent)'};" data-toggle="${t.active}">${t.active ? 'Deactivate' : 'Reactivate'}</button>
+        </div>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="lead-row">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(t.name)}</span>
+          <span class="lead-phone">${escapeHtml(t.specialization || 'No specialization set')}</span>
+        </div>
+        <div class="lead-meta">
+          <span class="status-pill status-${t.active ? 'active' : 'cancelled'}">${t.active ? 'Active' : 'Inactive'}</span>
+          <span class="chevron">▶</span>
+        </div>
+      </div>
+      <div class="thread">${editHtml}</div>
+    `;
+
+    card.querySelector('.lead-row').onclick = () => {
+      editTrainerId = editing ? null : t.id;
+      renderTrainersPanel();
+    };
+
+    card.querySelector('.save-trainer-btn').onclick = (e) => {
+      e.stopPropagation();
+      const name = card.querySelector('.edit-name').value.trim();
+      const phone = card.querySelector('.edit-phone').value.trim();
+      const spec = card.querySelector('.edit-spec').value.trim();
+      const bio = card.querySelector('.edit-bio').value.trim();
+      const errEl = card.querySelector('.action-error');
+      if(!name){
+        errEl.textContent = 'Trainer name is required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = card.querySelector('.save-trainer-btn');
+      btn.disabled = true;
+      supabaseClient.rpc('update_trainer', {
+        input_password: sessionPassword, trainer_id_input: t.id, trainer_name: name,
+        trainer_phone: phone, trainer_specialization: spec, trainer_bio: bio, trainer_active: t.active
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = 'Could not save — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        editTrainerId = null;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+
+    const toggleBtn = card.querySelector('[data-toggle]');
+    toggleBtn.onclick = (e) => {
+      e.stopPropagation();
+      const wasActive = toggleBtn.dataset.toggle === 'true';
+      toggleBtn.disabled = true;
+      supabaseClient.rpc('update_trainer', {
+        input_password: sessionPassword, trainer_id_input: t.id, trainer_name: t.name,
+        trainer_phone: t.phone || '', trainer_specialization: t.specialization || '',
+        trainer_bio: t.bio || '', trainer_active: !wasActive
+      }).then(({ error }) => {
+        if(!error){
+          editTrainerId = null;
+          refreshAnalytics().then(renderDash);
+        }
+      });
     };
 
     list.appendChild(card);
