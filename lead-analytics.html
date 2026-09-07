@@ -113,6 +113,34 @@
 
   .empty-state{text-align:center; color:var(--muted); padding:60px 20px; font-size:14px;}
   .loading{text-align:center; color:var(--muted); padding:40px; font-size:14px;}
+
+  .tabs{display:flex; gap:18px; margin-bottom:20px; border-bottom:1px solid var(--line);}
+  .tab-btn{
+    background:none; border:none; padding:10px 2px; font-size:14px; font-weight:700;
+    color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; font-family:inherit;
+  }
+  .tab-btn.active{color:var(--accent-dark); border-bottom-color:var(--accent);}
+
+  .status-active{background:#EAF3F0; color:var(--accent-dark);}
+  .status-expiring{background:#FFF3E0; color:var(--gold);}
+  .status-expired{background:#FBE9E4; color:var(--red);}
+  .status-frozen{background:#EAF0FB; color:var(--blue);}
+  .status-cancelled{background:#F3F0EA; color:var(--muted);}
+  .expiry-badge{font-size:11px; font-weight:700; color:var(--muted);}
+  .expiry-badge.urgent{color:var(--red);}
+  .expiry-badge.soon{color:var(--gold);}
+
+  .add-member-form{
+    display:none; margin-bottom:16px; padding:14px; background:#fff;
+    border:1px solid var(--line); border-radius:12px;
+  }
+  .add-member-form.open{display:grid; gap:8px; grid-template-columns:1fr 1fr;}
+  .add-member-form label{font-size:11px; color:var(--muted); display:block; margin-bottom:3px;}
+  .add-member-form input, .add-member-form select{
+    width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px;
+    font-size:13px; font-family:inherit;
+  }
+  .add-member-form .full{grid-column:1 / -1;}
 </style>
 </head>
 <body>
@@ -128,12 +156,29 @@
 </div>
 
 <div class="wrap" id="dashScreen" style="display:none;">
-  <h1>Flex Fitness — Lead Analytics</h1>
-  <p class="sub">Everyone who has messaged the WhatsApp bot, most recently contacted first.</p>
+  <h1>Flex Fitness — Analytics</h1>
+  <p class="sub">Leads from the WhatsApp bot, and members converted from them.</p>
 
-  <div class="stats-row" id="statsRow"></div>
-  <div class="filters" id="filterRow"></div>
-  <div id="leadsList"><div class="loading">Loading leads…</div></div>
+  <div class="tabs">
+    <button class="tab-btn active" id="tabLeadsBtn">Leads</button>
+    <button class="tab-btn" id="tabMembersBtn">Members</button>
+  </div>
+
+  <div id="leadsPanel">
+    <div class="stats-row" id="statsRow"></div>
+    <div class="filters" id="filterRow"></div>
+    <div id="leadsList"><div class="loading">Loading leads…</div></div>
+  </div>
+
+  <div id="membersPanel" style="display:none;">
+    <div class="stats-row" id="memberStatsRow"></div>
+    <div class="filters" id="memberFilterRow"></div>
+    <button class="small-btn" id="addMemberBtn" style="margin-bottom:14px; width:auto;">+ Add member</button>
+    <div class="add-member-form" id="addMemberForm"></div>
+    <div id="membersList"></div>
+  </div>
+
+  <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
 <script>
@@ -146,6 +191,11 @@ let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_lea
 let activeFilter = 'all';
 let openLeadId = null;
 let convertOpenLeadId = null;
+let activeTab = 'leads';
+let memberFilter = 'all';
+let openMemberId = null;
+let renewOpenMemberId = null;
+let addMemberFormOpen = false;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -163,8 +213,24 @@ function tryLogin(){
     analytics = data || analytics;
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('dashScreen').style.display = 'block';
+    switchTab('leads');
     renderDash();
   });
+}
+
+function switchTab(tab){
+  activeTab = tab;
+  document.getElementById('leadsPanel').style.display = tab === 'leads' ? 'block' : 'none';
+  document.getElementById('membersPanel').style.display = tab === 'members' ? 'block' : 'none';
+  document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
+  document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
+}
+document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
+document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
+
+function renderDash(){
+  renderLeadsPanel();
+  renderMembersPanel();
 }
 
 function refreshAnalytics(){
@@ -187,7 +253,7 @@ function addMonths(dateStr, months){
   return d.toISOString().slice(0, 10);
 }
 
-function renderDash(){
+function renderLeadsPanel(){
   const statuses = Object.keys(STATUS_LABELS).filter(s => analytics.by_status[s]);
 
   const statsRow = document.getElementById('statsRow');
@@ -371,6 +437,231 @@ function renderDash(){
         });
       };
     }
+
+    list.appendChild(card);
+  });
+}
+
+const MEMBER_STATUS_LABELS = {
+  active: 'Active', expiring: 'Expiring Soon', expired: 'Expired',
+  frozen: 'Frozen', cancelled: 'Cancelled'
+};
+
+function memberDisplayStatus(m){
+  if(m.status === 'frozen') return 'frozen';
+  if(m.status === 'cancelled') return 'cancelled';
+  if(!m.plan_end_date) return 'active';
+  const daysLeft = Math.round((new Date(m.plan_end_date) - new Date(new Date().toDateString())) / 86400000);
+  if(daysLeft < 0) return 'expired';
+  if(daysLeft <= 7) return 'expiring';
+  return 'active';
+}
+
+function daysLeftLabel(m){
+  if(!m.plan_end_date) return 'No expiry set';
+  const daysLeft = Math.round((new Date(m.plan_end_date) - new Date(new Date().toDateString())) / 86400000);
+  if(daysLeft < 0) return `Expired ${Math.abs(daysLeft)}d ago`;
+  if(daysLeft === 0) return 'Expires today';
+  return `${daysLeft}d left`;
+}
+
+function setMemberStatus(memberId, newStatus){
+  supabaseClient.rpc('update_member_status', {
+    input_password: sessionPassword, member_id_input: memberId, new_status: newStatus
+  }).then(({ error }) => {
+    if(!error) refreshAnalytics().then(renderDash);
+  });
+}
+
+function renderMembersPanel(){
+  const members = analytics.members || [];
+  const counts = { active: 0, expiring: 0, expired: 0, frozen: 0, cancelled: 0 };
+  members.forEach(m => counts[memberDisplayStatus(m)]++);
+
+  document.getElementById('memberStatsRow').innerHTML = `
+    <div class="stat"><b>${members.length}</b>Total members</div>
+    <div class="stat"><b>${counts.active}</b>Active</div>
+    <div class="stat escalated"><b>${counts.expiring}</b>Expiring ≤7d</div>
+    <div class="stat escalated"><b>${counts.expired}</b>Expired</div>
+    <div class="stat"><b>${counts.frozen + counts.cancelled}</b>Frozen/Cancelled</div>
+  `;
+
+  const filterRow = document.getElementById('memberFilterRow');
+  filterRow.innerHTML = '';
+  [['all','All',members.length],['active','Active',counts.active],['expiring','Expiring Soon',counts.expiring],
+   ['expired','Expired',counts.expired],['frozen','Frozen',counts.frozen],['cancelled','Cancelled',counts.cancelled]]
+    .forEach(([key, label, count]) => {
+      const chip = document.createElement('button');
+      chip.className = 'filter-chip' + (memberFilter === key ? ' active' : '');
+      chip.textContent = `${label} (${count})`;
+      chip.onclick = () => { memberFilter = key; renderMembersPanel(); };
+      filterRow.appendChild(chip);
+    });
+
+  document.getElementById('addMemberBtn').onclick = () => { addMemberFormOpen = !addMemberFormOpen; renderMembersPanel(); };
+
+  const formEl = document.getElementById('addMemberForm');
+  formEl.className = 'add-member-form' + (addMemberFormOpen ? ' open' : '');
+  formEl.innerHTML = `
+    <div class="full"><label>Name</label><input type="text" id="addName" placeholder="Full name"></div>
+    <div><label>Phone</label><input type="text" id="addPhone" placeholder="919XXXXXXXXX"></div>
+    <div><label>Plan</label><select id="addPlan">${MEMBERSHIP_PLANS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
+    <div><label>Start date</label><input type="date" id="addStart" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div class="full"><div class="action-error" id="addMemberError"></div><button class="small-btn" id="confirmAddBtn">Add member</button></div>
+  `;
+  if(addMemberFormOpen){
+    document.getElementById('confirmAddBtn').onclick = () => {
+      const name = document.getElementById('addName').value.trim();
+      const phone = document.getElementById('addPhone').value.trim();
+      const plan = document.getElementById('addPlan').value;
+      const start = document.getElementById('addStart').value;
+      const errEl = document.getElementById('addMemberError');
+      if(!name || !phone){
+        errEl.textContent = 'Name and phone are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const end = addMonths(start, PLAN_MONTHS[plan]);
+      const btn = document.getElementById('confirmAddBtn');
+      btn.disabled = true;
+      supabaseClient.rpc('add_member', {
+        input_password: sessionPassword, member_phone: phone, member_name: name,
+        membership_plan_input: plan, plan_start_date_input: start, plan_end_date_input: end
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = (error.message || '').includes('already exists')
+            ? 'A member with this phone already exists.'
+            : 'Could not add member — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        addMemberFormOpen = false;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
+
+  const filtered = members
+    .filter(m => memberFilter === 'all' || memberDisplayStatus(m) === memberFilter)
+    .sort((a, b) => {
+      if(!a.plan_end_date) return 1;
+      if(!b.plan_end_date) return -1;
+      return new Date(a.plan_end_date) - new Date(b.plan_end_date);
+    });
+
+  const list = document.getElementById('membersList');
+  if(filtered.length === 0){
+    list.innerHTML = '<div class="empty-state">No members yet for this filter.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  filtered.forEach(m => {
+    const card = document.createElement('div');
+    card.className = 'lead-card' + (openMemberId === m.id ? ' open' : '');
+    const dispStatus = memberDisplayStatus(m);
+    const expiryStr = m.plan_end_date
+      ? new Date(m.plan_end_date).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })
+      : '—';
+    const joinedStr = new Date(m.joined_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+    const renewOpen = renewOpenMemberId === m.id;
+    const renewFromDefault = (m.plan_end_date && new Date(m.plan_end_date) > new Date())
+      ? m.plan_end_date
+      : new Date().toISOString().slice(0,10);
+
+    const actionsHtml = `
+      <div class="actions">
+        <span style="font-size:12px; color:var(--muted);">Joined ${joinedStr}</span>
+        <button class="small-btn secondary renew-btn">Renew</button>
+        ${m.status !== 'frozen'
+          ? '<button class="small-btn freeze-btn" style="background:var(--muted);">Freeze</button>'
+          : '<button class="small-btn unfreeze-btn">Unfreeze</button>'}
+        ${m.status !== 'cancelled'
+          ? '<button class="small-btn cancel-btn" style="background:var(--red);">Cancel</button>'
+          : ''}
+      </div>
+      <div class="action-error"></div>
+      <div class="convert-form${renewOpen ? ' open' : ''}">
+        <div>
+          <label>Plan</label>
+          <select class="renew-plan">
+            ${MEMBERSHIP_PLANS.map(p => `<option value="${p}" ${p === m.membership_plan ? 'selected' : ''}>${p}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Renew from</label>
+          <input type="date" class="renew-from" value="${renewFromDefault}">
+        </div>
+        <div class="full">
+          <button class="small-btn confirm-renew-btn">Confirm renewal</button>
+        </div>
+      </div>
+    `;
+
+    card.innerHTML = `
+      <div class="lead-row">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(m.name)}</span>
+          <span class="lead-phone">${escapeHtml(m.phone)}</span>
+        </div>
+        <div class="lead-meta">
+          <span class="expiry-badge ${dispStatus === 'expired' ? 'urgent' : dispStatus === 'expiring' ? 'soon' : ''}">${escapeHtml(daysLeftLabel(m))}</span>
+          <span class="status-pill status-${dispStatus}">${MEMBER_STATUS_LABELS[dispStatus]}</span>
+          <span>${escapeHtml(m.membership_plan || '')} · exp ${expiryStr}</span>
+          <span class="chevron">▶</span>
+        </div>
+      </div>
+      <div class="thread">${actionsHtml}</div>
+    `;
+
+    card.querySelector('.lead-row').onclick = () => {
+      openMemberId = openMemberId === m.id ? null : m.id;
+      renderMembersPanel();
+    };
+
+    card.querySelector('.renew-btn').onclick = (e) => {
+      e.stopPropagation();
+      renewOpenMemberId = renewOpen ? null : m.id;
+      renderMembersPanel();
+    };
+
+    const confirmRenewBtn = card.querySelector('.confirm-renew-btn');
+    if(confirmRenewBtn){
+      confirmRenewBtn.onclick = (e) => {
+        e.stopPropagation();
+        const plan = card.querySelector('.renew-plan').value;
+        const from = card.querySelector('.renew-from').value;
+        const newEnd = addMonths(from, PLAN_MONTHS[plan]);
+        confirmRenewBtn.disabled = true;
+        supabaseClient.rpc('renew_member', {
+          input_password: sessionPassword, member_id_input: m.id,
+          membership_plan_input: plan, plan_end_date_input: newEnd
+        }).then(({ error }) => {
+          if(error){
+            const errEl = card.querySelector('.action-error');
+            errEl.textContent = 'Could not renew — please try again.';
+            errEl.style.display = 'block';
+            confirmRenewBtn.disabled = false;
+            return;
+          }
+          renewOpenMemberId = null;
+          refreshAnalytics().then(renderDash);
+        });
+      };
+    }
+
+    const freezeBtn = card.querySelector('.freeze-btn');
+    if(freezeBtn) freezeBtn.onclick = (e) => { e.stopPropagation(); setMemberStatus(m.id, 'frozen'); };
+
+    const unfreezeBtn = card.querySelector('.unfreeze-btn');
+    if(unfreezeBtn) unfreezeBtn.onclick = (e) => { e.stopPropagation(); setMemberStatus(m.id, 'active'); };
+
+    const cancelBtn = card.querySelector('.cancel-btn');
+    if(cancelBtn) cancelBtn.onclick = (e) => {
+      e.stopPropagation();
+      if(confirm(`Cancel membership for ${m.name}?`)) setMemberStatus(m.id, 'cancelled');
+    };
 
     list.appendChild(card);
   });
