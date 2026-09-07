@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Fitness — Lead Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#12181B; --paper:#FBF9F6; --panel:#FFFFFF; --line:#E4E0D8;
+    --accent:#1F6F5C; --accent-dark:#134A3D; --gold:#C08A3E; --muted:#6B7280;
+    --red:#B4491F; --blue:#2563A6;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px 16px 60px;
+  }
+  .wrap{max-width:1000px; margin:0 auto;}
+  h1{font-size:22px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:14px; margin:0 0 24px;}
+
+  .login-card{
+    max-width:360px; margin:80px auto; background:#fff; border:1px solid var(--line);
+    border-radius:14px; padding:28px 24px; text-align:center;
+  }
+  .login-card input{
+    width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px;
+    font-size:15px; margin:16px 0; font-family:inherit;
+  }
+  .login-card button, .btn{
+    width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px;
+    padding:13px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .error-text{color:var(--red); font-size:13px; margin-top:8px; display:none;}
+
+  .stats-row{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
+  .stat{background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:13px; min-width:96px;}
+  .stat b{display:block; font-size:22px; color:var(--accent-dark);}
+  .stat.escalated b{color:var(--red);}
+
+  .filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;}
+  .filter-chip{
+    border:1.5px solid var(--line); background:#fff; border-radius:20px;
+    padding:7px 14px; font-size:13px; cursor:pointer; color:var(--muted);
+  }
+  .filter-chip.active{border-color:var(--accent); background:#EAF3F0; color:var(--accent-dark); font-weight:700;}
+
+  .lead-card{
+    background:#fff; border:1px solid var(--line); border-radius:12px;
+    margin-bottom:12px; overflow:hidden;
+  }
+  .lead-row{
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:14px 18px; cursor:pointer;
+  }
+  .lead-row:hover{background:#FAFAF8;}
+  .lead-main{display:flex; align-items:center; gap:10px; min-width:0;}
+  .lead-name{font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .lead-phone{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .status-pill{
+    font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; text-transform:capitalize;
+    white-space:nowrap;
+  }
+  .status-new{background:#EAF0FB; color:var(--blue);}
+  .status-contacted{background:#FFF3E0; color:var(--gold);}
+  .status-trial_booked{background:#EAF3F0; color:var(--accent-dark);}
+  .status-converted{background:#134A3D; color:#fff;}
+  .status-lost{background:#F3F0EA; color:var(--muted);}
+  .lead-meta{display:flex; align-items:center; gap:14px; font-size:12px; color:var(--muted); flex-shrink:0;}
+  .escalated-badge{color:var(--red); font-weight:700;}
+  .chevron{transition:transform 0.15s; color:var(--muted); font-size:12px;}
+  .lead-card.open .chevron{transform:rotate(90deg);}
+
+  .thread{display:none; border-top:1px solid var(--line); padding:14px 18px; background:#FAFAF8;}
+  .lead-card.open .thread{display:block;}
+  .msg{max-width:75%; margin-bottom:8px; padding:8px 12px; border-radius:10px; font-size:13px; line-height:1.4;}
+  .msg.inbound{background:#fff; border:1px solid var(--line); margin-right:auto;}
+  .msg.outbound{background:var(--accent); color:#fff; margin-left:auto;}
+  .msg.escalated{border:1.5px solid var(--red);}
+  .msg-time{font-size:10px; opacity:0.65; margin-top:3px;}
+  .no-thread{font-size:12px; color:var(--muted); font-style:italic;}
+
+  .actions{
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+    margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);
+  }
+  .actions select{
+    padding:7px 10px; border:1.5px solid var(--line); border-radius:8px;
+    font-size:12px; font-family:inherit; background:#fff;
+  }
+  .actions .small-btn{
+    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .actions .small-btn.secondary{background:var(--gold);}
+  .actions .small-btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .member-note{font-size:12px; color:var(--accent-dark); font-weight:700;}
+  .action-error{color:var(--red); font-size:12px; margin-top:6px; display:none;}
+
+  .convert-form{
+    display:none; margin-top:12px; padding:12px; background:#fff;
+    border:1px solid var(--line); border-radius:10px;
+  }
+  .convert-form.open{display:grid; gap:8px; grid-template-columns:1fr 1fr;}
+  .convert-form label{font-size:11px; color:var(--muted); display:block; margin-bottom:3px;}
+  .convert-form input, .convert-form select{
+    width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px;
+    font-size:13px; font-family:inherit;
+  }
+  .convert-form .full{grid-column:1 / -1;}
+
+  .empty-state{text-align:center; color:var(--muted); padding:60px 20px; font-size:14px;}
+  .loading{text-align:center; color:var(--muted); padding:40px; font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="loginScreen">
+  <div class="login-card">
+    <h1 style="font-size:18px;">Lead Analytics</h1>
+    <p class="sub">Enter the password to view leads and conversations.</p>
+    <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter') tryLogin()">
+    <button onclick="tryLogin()">View analytics</button>
+    <div class="error-text" id="loginError">Incorrect password — please try again.</div>
+  </div>
+</div>
+
+<div class="wrap" id="dashScreen" style="display:none;">
+  <h1>Flex Fitness — Lead Analytics</h1>
+  <p class="sub">Everyone who has messaged the WhatsApp bot, most recently contacted first.</p>
+
+  <div class="stats-row" id="statsRow"></div>
+  <div class="filters" id="filterRow"></div>
+  <div id="leadsList"><div class="loading">Loading leads…</div></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://tvdjrdsormftjzmghgtx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2ZGpyZHNvcm1mdGp6bWdoZ3R4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MjU5NzQsImV4cCI6MjEwMDUwMTk3NH0.U_NayJkuHuvZPr--LJ3EzfvjPrd9ha-564DEhbuqkBE";
+
+let supabaseClient = null;
+let sessionPassword = null;
+let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], recent_messages: [] };
+let activeFilter = 'all';
+let openLeadId = null;
+let convertOpenLeadId = null;
+
+function tryLogin(){
+  const pw = document.getElementById('pwInput').value;
+  const errEl = document.getElementById('loginError');
+
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  supabaseClient.rpc('get_lead_analytics', { input_password: pw }).then(({ data, error }) => {
+    if(error){
+      errEl.textContent = "Incorrect password — please try again.";
+      errEl.style.display = 'block';
+      return;
+    }
+    sessionPassword = pw;
+    analytics = data || analytics;
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('dashScreen').style.display = 'block';
+    renderDash();
+  });
+}
+
+function refreshAnalytics(){
+  return supabaseClient.rpc('get_lead_analytics', { input_password: sessionPassword }).then(({ data, error }) => {
+    if(error) return;
+    analytics = data || analytics;
+  });
+}
+
+const STATUS_LABELS = {
+  new: 'New', contacted: 'Contacted', trial_booked: 'Trial booked',
+  converted: 'Converted', lost: 'Lost'
+};
+const MEMBERSHIP_PLANS = ['Monthly', '3 Months', '6 Months'];
+const PLAN_MONTHS = { 'Monthly': 1, '3 Months': 3, '6 Months': 6 };
+
+function addMonths(dateStr, months){
+  const d = new Date(dateStr);
+  d.setMonth(d.getMonth() + months);
+  return d.toISOString().slice(0, 10);
+}
+
+function renderDash(){
+  const statuses = Object.keys(STATUS_LABELS).filter(s => analytics.by_status[s]);
+
+  const statsRow = document.getElementById('statsRow');
+  statsRow.innerHTML = `
+    <div class="stat"><b>${analytics.total_leads}</b>Total leads</div>
+    ${statuses.map(s => `<div class="stat"><b>${analytics.by_status[s]}</b>${STATUS_LABELS[s]}</div>`).join('')}
+    <div class="stat"><b>${analytics.total_members || 0}</b>Members</div>
+    <div class="stat escalated"><b>${analytics.escalated_leads}</b>Escalated</div>
+  `;
+
+  const filterRow = document.getElementById('filterRow');
+  filterRow.innerHTML = '';
+  const allChip = document.createElement('button');
+  allChip.className = 'filter-chip' + (activeFilter === 'all' ? ' active' : '');
+  allChip.textContent = `All (${analytics.total_leads})`;
+  allChip.onclick = () => { activeFilter = 'all'; renderDash(); };
+  filterRow.appendChild(allChip);
+
+  statuses.forEach(s => {
+    const chip = document.createElement('button');
+    chip.className = 'filter-chip' + (activeFilter === s ? ' active' : '');
+    chip.textContent = `${STATUS_LABELS[s]} (${analytics.by_status[s]})`;
+    chip.onclick = () => { activeFilter = s; renderDash(); };
+    filterRow.appendChild(chip);
+  });
+
+  const escChip = document.createElement('button');
+  escChip.className = 'filter-chip' + (activeFilter === 'escalated' ? ' active' : '');
+  escChip.textContent = `Escalated (${analytics.escalated_leads})`;
+  escChip.onclick = () => { activeFilter = 'escalated'; renderDash(); };
+  filterRow.appendChild(escChip);
+
+  const leads = (analytics.leads || []).filter(l => {
+    if(activeFilter === 'all') return true;
+    if(activeFilter === 'escalated') return l.escalated_count > 0;
+    return l.status === activeFilter;
+  });
+
+  const list = document.getElementById('leadsList');
+  if(leads.length === 0){
+    list.innerHTML = '<div class="empty-state">No leads yet for this filter.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  leads.forEach(lead => {
+    const card = document.createElement('div');
+    card.className = 'lead-card' + (openLeadId === lead.id ? ' open' : '');
+
+    const lastContact = new Date(lead.last_contact_at);
+    const lastContactStr = lastContact.toLocaleDateString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+
+    const thread = (analytics.recent_messages || [])
+      .filter(m => m.lead_id === lead.id)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+    let threadHtml = '<div class="no-thread">No messages in the last 200 logged — thread may be older.</div>';
+    if(thread.length){
+      threadHtml = thread.map(m => {
+        const t = new Date(m.created_at).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+        return `<div class="msg ${m.direction}${m.escalated ? ' escalated' : ''}">${escapeHtml(m.body)}<div class="msg-time">${t}</div></div>`;
+      }).join('');
+    }
+
+    const member = (analytics.members || []).find(m => m.lead_id === lead.id);
+    let actionsHtml;
+    if(member){
+      const joined = new Date(member.joined_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+      actionsHtml = `<div class="actions"><span class="member-note">✓ Member since ${joined} — ${escapeHtml(member.membership_plan || '')}</span></div>`;
+    } else {
+      const statusOptions = Object.keys(STATUS_LABELS).filter(s => s !== 'converted');
+      actionsHtml = `
+        <div class="actions">
+          <select class="status-select">
+            ${statusOptions.map(s => `<option value="${s}" ${s === lead.status ? 'selected' : ''}>${STATUS_LABELS[s]}</option>`).join('')}
+          </select>
+          <button class="small-btn update-status-btn">Update status</button>
+          <button class="small-btn secondary convert-btn">Convert to member →</button>
+        </div>
+        <div class="action-error"></div>
+        <div class="convert-form${convertOpenLeadId === lead.id ? ' open' : ''}">
+          <div class="full">
+            <label>Member name</label>
+            <input type="text" class="convert-name" value="${escapeHtml(lead.name || '')}" placeholder="Full name">
+          </div>
+          <div>
+            <label>Plan</label>
+            <select class="convert-plan">
+              ${MEMBERSHIP_PLANS.map(p => `<option value="${p}">${p}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label>Start date</label>
+            <input type="date" class="convert-start" value="${new Date().toISOString().slice(0,10)}">
+          </div>
+          <div class="full">
+            <button class="small-btn confirm-convert-btn">Confirm — create member</button>
+          </div>
+        </div>
+      `;
+    }
+
+    card.innerHTML = `
+      <div class="lead-row">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(lead.name || 'Unnamed')}</span>
+          <span class="lead-phone">${escapeHtml(lead.phone)}</span>
+        </div>
+        <div class="lead-meta">
+          ${lead.escalated_count > 0 ? `<span class="escalated-badge">⚠ ${lead.escalated_count}</span>` : ''}
+          <span class="status-pill status-${member ? 'converted' : lead.status}">${member ? 'Converted' : (STATUS_LABELS[lead.status] || lead.status)}</span>
+          <span>${lastContactStr}</span>
+          <span class="chevron">▶</span>
+        </div>
+      </div>
+      <div class="thread">${threadHtml}${actionsHtml}</div>
+    `;
+
+    card.querySelector('.lead-row').onclick = () => {
+      openLeadId = openLeadId === lead.id ? null : lead.id;
+      renderDash();
+    };
+
+    const updateBtn = card.querySelector('.update-status-btn');
+    if(updateBtn){
+      updateBtn.onclick = (e) => {
+        e.stopPropagation();
+        const newStatus = card.querySelector('.status-select').value;
+        updateBtn.disabled = true;
+        supabaseClient.rpc('update_lead_status', {
+          input_password: sessionPassword, lead_id_input: lead.id, new_status: newStatus
+        }).then(({ error }) => {
+          if(error){
+            const errEl = card.querySelector('.action-error');
+            errEl.textContent = 'Could not update status — please try again.';
+            errEl.style.display = 'block';
+            updateBtn.disabled = false;
+            return;
+          }
+          refreshAnalytics().then(renderDash);
+        });
+      };
+    }
+
+    const convertBtn = card.querySelector('.convert-btn');
+    if(convertBtn){
+      convertBtn.onclick = (e) => {
+        e.stopPropagation();
+        convertOpenLeadId = convertOpenLeadId === lead.id ? null : lead.id;
+        renderDash();
+      };
+    }
+
+    const confirmBtn = card.querySelector('.confirm-convert-btn');
+    if(confirmBtn){
+      confirmBtn.onclick = (e) => {
+        e.stopPropagation();
+        const name = card.querySelector('.convert-name').value.trim();
+        const plan = card.querySelector('.convert-plan').value;
+        const start = card.querySelector('.convert-start').value;
+        const errEl = card.querySelector('.action-error');
+        if(!name){
+          errEl.textContent = 'Member name is required.';
+          errEl.style.display = 'block';
+          return;
+        }
+        const end = addMonths(start, PLAN_MONTHS[plan]);
+        confirmBtn.disabled = true;
+        supabaseClient.rpc('convert_lead_to_member', {
+          input_password: sessionPassword, lead_id_input: lead.id, member_name: name,
+          membership_plan_input: plan, plan_start_date_input: start, plan_end_date_input: end
+        }).then(({ error }) => {
+          if(error){
+            errEl.textContent = 'Could not create member — please try again.';
+            errEl.style.display = 'block';
+            confirmBtn.disabled = false;
+            return;
+          }
+          convertOpenLeadId = null;
+          refreshAnalytics().then(renderDash);
+        });
+      };
+    }
+
+    list.appendChild(card);
+  });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
