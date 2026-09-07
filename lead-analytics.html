@@ -305,6 +305,19 @@ function addMonths(dateStr, months){
   return d.toISOString().slice(0, 10);
 }
 
+// Local calendar date as YYYY-MM-DD — NOT new Date().toISOString(), which
+// silently returns yesterday's date during 12am-5:30am IST (India is
+// UTC+5:30, so early-morning local time is still "yesterday" in UTC).
+// Matters here since the gym opens at 5:30am and reception may be on this
+// page right at that boundary.
+function todayLocalDateString(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function renderLeadsPanel(){
   const statuses = Object.keys(STATUS_LABELS).filter(s => analytics.by_status[s]);
 
@@ -399,7 +412,7 @@ function renderLeadsPanel(){
           </div>
           <div>
             <label>Start date</label>
-            <input type="date" class="convert-start" value="${new Date().toISOString().slice(0,10)}">
+            <input type="date" class="convert-start" value="${todayLocalDateString()}">
           </div>
           <div class="full">
             <button class="small-btn confirm-convert-btn">Confirm — create member</button>
@@ -499,11 +512,21 @@ const MEMBER_STATUS_LABELS = {
   frozen: 'Frozen', cancelled: 'Cancelled'
 };
 
+// Both sides parsed identically (UTC noon) so the timezone offset cancels
+// out cleanly — mixing new Date(dateOnlyString) (parses as UTC midnight)
+// with new Date().toDateString() (parses as local midnight) would silently
+// skew every comparison by the local UTC offset.
+function daysBetweenDateStrings(fromStr, toStr){
+  const from = new Date(fromStr + 'T12:00:00Z');
+  const to = new Date(toStr + 'T12:00:00Z');
+  return Math.round((to - from) / 86400000);
+}
+
 function memberDisplayStatus(m){
   if(m.status === 'frozen') return 'frozen';
   if(m.status === 'cancelled') return 'cancelled';
   if(!m.plan_end_date) return 'active';
-  const daysLeft = Math.round((new Date(m.plan_end_date) - new Date(new Date().toDateString())) / 86400000);
+  const daysLeft = daysBetweenDateStrings(todayLocalDateString(), m.plan_end_date);
   if(daysLeft < 0) return 'expired';
   if(daysLeft <= 7) return 'expiring';
   return 'active';
@@ -511,7 +534,7 @@ function memberDisplayStatus(m){
 
 function daysLeftLabel(m){
   if(!m.plan_end_date) return 'No expiry set';
-  const daysLeft = Math.round((new Date(m.plan_end_date) - new Date(new Date().toDateString())) / 86400000);
+  const daysLeft = daysBetweenDateStrings(todayLocalDateString(), m.plan_end_date);
   if(daysLeft < 0) return `Expired ${Math.abs(daysLeft)}d ago`;
   if(daysLeft === 0) return 'Expires today';
   return `${daysLeft}d left`;
@@ -558,7 +581,7 @@ function renderMembersPanel(){
     <div class="full"><label>Name</label><input type="text" id="addName" placeholder="Full name"></div>
     <div><label>Phone</label><input type="text" id="addPhone" placeholder="919XXXXXXXXX"></div>
     <div><label>Plan</label><select id="addPlan">${MEMBERSHIP_PLANS.map(p => `<option value="${p}">${p}</option>`).join('')}</select></div>
-    <div><label>Start date</label><input type="date" id="addStart" value="${new Date().toISOString().slice(0,10)}"></div>
+    <div><label>Start date</label><input type="date" id="addStart" value="${todayLocalDateString()}"></div>
     <div class="full"><div class="action-error" id="addMemberError"></div><button class="small-btn" id="confirmAddBtn">Add member</button></div>
   `;
   if(addMemberFormOpen){
@@ -618,9 +641,9 @@ function renderMembersPanel(){
       : '—';
     const joinedStr = new Date(m.joined_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
     const renewOpen = renewOpenMemberId === m.id;
-    const renewFromDefault = (m.plan_end_date && new Date(m.plan_end_date) > new Date())
+    const renewFromDefault = (m.plan_end_date && m.plan_end_date > todayLocalDateString())
       ? m.plan_end_date
-      : new Date().toISOString().slice(0,10);
+      : todayLocalDateString();
 
     const activeTrainers = (analytics.trainers || []).filter(t => t.active);
     const actionsHtml = `
@@ -1074,7 +1097,7 @@ function renderClassesPanel(){
 
 function renderBookingsPanel(){
   const bookings = analytics.bookings || [];
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocalDateString();
   const todayCount = bookings.filter(b => b.class_date === today).length;
 
   document.getElementById('bookingStatsRow').innerHTML = `
