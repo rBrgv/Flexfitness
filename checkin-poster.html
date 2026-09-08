@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Fitness — Check-in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#f5f1e8; --paper:#0a0908; --panel:#17140f; --panel-raised:#1e1a13; --line:#2c2820;
+    --accent:#e8a93d; --accent-dark:#c98b1f; --gold:#e8a93d; --muted:#a39c8c;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; align-items:center; justify-content:center; padding:32px;
+  }
+  .poster{
+    max-width:480px; width:100%; text-align:center;
+    border:1px solid var(--line); border-radius:8px; background:var(--panel);
+    padding:48px 36px; box-shadow:0 4px 24px rgba(0,0,0,0.4);
+  }
+  .brand{display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:28px;}
+  .brand-word{font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.03em; font-size:18px;}
+  .brand-word .gold{color:var(--gold);}
+  h1{
+    font-family:"Oswald",sans-serif; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.02em; font-size:34px; line-height:1.15; margin:0 0 8px; text-wrap:balance;
+  }
+  h1 .gold{color:var(--gold);}
+  .sub{color:var(--muted); font-size:14px; margin:0 0 32px;}
+  .qr-frame{
+    background:#fff; border-radius:12px; padding:20px; display:inline-block; margin-bottom:28px;
+  }
+  .qr-frame img{display:block; width:260px; height:260px;}
+  .steps{list-style:none; margin:0 0 8px; padding:0; text-align:left; display:inline-block;}
+  .steps li{
+    font-size:14px; color:var(--ink); margin-bottom:10px; padding-left:28px; position:relative;
+  }
+  .steps li b{color:var(--gold); position:absolute; left:0;}
+  .keyword{
+    font-family:"Oswald",sans-serif; font-weight:600; letter-spacing:0.04em;
+    background:var(--panel-raised); border:1px solid var(--line); border-radius:4px;
+    padding:1px 8px; color:var(--gold);
+  }
+  .foot{margin-top:28px; padding-top:20px; border-top:1px solid var(--line); font-size:12px; color:var(--muted);}
+
+  @media print{
+    body{padding:0; background:#fff;}
+    .poster{box-shadow:none; border:none;}
+  }
+</style>
+</head>
+<body>
+
+<div class="poster">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+      <path d="M4 6h9l3 6 3-6h9l-8 10 8 10h-9l-3-6-3 6H4l8-10Z" fill="none" stroke="#e8a93d" stroke-width="2.2" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-word">Flex <span class="gold">Fitness</span></span>
+  </div>
+
+  <h1>Scan to <span class="gold">check in</span></h1>
+  <p class="sub">Members only — one scan opens WhatsApp for you</p>
+
+  <div class="qr-frame">
+    <img src="data:image/png;base64,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" alt="Scan to check in">
+  </div>
+
+  <ol class="steps">
+    <li><b>1.</b>Scan the QR code with your phone camera</li>
+    <li><b>2.</b>WhatsApp opens with a message pre-filled: <span class="keyword">CHECKIN</span></li>
+    <li><b>3.</b>Tap send — you'll get an instant confirmation</li>
+  </ol>
+
+  <div class="foot">No signal or WhatsApp trouble? Just check in at the front desk.</div>
+</div>
+
+</body>
+</html>

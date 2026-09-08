@@ -238,6 +238,7 @@
     <button class="tab-btn" id="tabTrainersBtn">Trainers</button>
     <button class="tab-btn" id="tabClassesBtn">Classes</button>
     <button class="tab-btn" id="tabBookingsBtn">Bookings</button>
+    <button class="tab-btn" id="tabCheckinsBtn">Check-ins</button>
   </div>
 
   <div id="leadsPanel">
@@ -279,6 +280,13 @@
     <div id="bookingsList"></div>
   </div>
 
+  <div id="checkinsPanel" style="display:none;">
+    <div class="stats-row" id="checkinStatsRow"></div>
+    <button class="small-btn" id="addCheckinBtn" style="margin-bottom:14px; width:auto;">+ Log check-in</button>
+    <div class="add-member-form" id="addCheckinForm"></div>
+    <div id="checkinsList"></div>
+  </div>
+
   <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
@@ -288,7 +296,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 let supabaseClient = null;
 let sessionPassword = null;
-let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], classes: [], bookings: [], recent_messages: [] };
+let analytics = { total_leads: 0, total_members: 0, by_status: {}, escalated_leads: 0, leads: [], members: [], trainers: [], classes: [], bookings: [], today_checkins: [], recent_messages: [] };
 let activeFilter = 'all';
 let openLeadId = null;
 let convertOpenLeadId = null;
@@ -303,6 +311,7 @@ let addClassFormOpen = false;
 let editClassId = null;
 let addBookingFormOpen = false;
 let bookingFilter = 'upcoming';
+let addCheckinFormOpen = false;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -332,17 +341,20 @@ function switchTab(tab){
   document.getElementById('trainersPanel').style.display = tab === 'trainers' ? 'block' : 'none';
   document.getElementById('classesPanel').style.display = tab === 'classes' ? 'block' : 'none';
   document.getElementById('bookingsPanel').style.display = tab === 'bookings' ? 'block' : 'none';
+  document.getElementById('checkinsPanel').style.display = tab === 'checkins' ? 'block' : 'none';
   document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
   document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
   document.getElementById('tabTrainersBtn').className = 'tab-btn' + (tab === 'trainers' ? ' active' : '');
   document.getElementById('tabClassesBtn').className = 'tab-btn' + (tab === 'classes' ? ' active' : '');
   document.getElementById('tabBookingsBtn').className = 'tab-btn' + (tab === 'bookings' ? ' active' : '');
+  document.getElementById('tabCheckinsBtn').className = 'tab-btn' + (tab === 'checkins' ? ' active' : '');
 }
 document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
 document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
 document.getElementById('tabTrainersBtn').onclick = () => switchTab('trainers');
 document.getElementById('tabClassesBtn').onclick = () => switchTab('classes');
 document.getElementById('tabBookingsBtn').onclick = () => switchTab('bookings');
+document.getElementById('tabCheckinsBtn').onclick = () => switchTab('checkins');
 
 function renderDash(){
   renderLeadsPanel();
@@ -350,6 +362,7 @@ function renderDash(){
   renderTrainersPanel();
   renderClassesPanel();
   renderBookingsPanel();
+  renderCheckinsPanel();
 }
 
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -525,6 +538,14 @@ function renderLeadDetail(lead){
         <button class="small-btn update-status-btn">Update status</button>
         <button class="small-btn secondary convert-btn">Convert to member →</button>
       </div>
+      <div class="actions">
+        <label style="font-size:11px; color:var(--muted);">Trial date</label>
+        <input type="date" class="trial-date-input" value="${lead.trial_date || ''}">
+        <button class="small-btn secondary save-trial-date-btn">Save</button>
+        <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted); cursor:pointer;">
+          <input type="checkbox" class="trial-attended-check" ${lead.trial_attended ? 'checked' : ''}> Trial attended
+        </label>
+      </div>
       <div class="action-error"></div>
       <div class="convert-form${convertOpenLeadId === lead.id ? ' open' : ''}">
         <div class="full">
@@ -594,6 +615,38 @@ function renderLeadDetail(lead){
           return;
         }
         refreshAnalytics().then(renderDash);
+      });
+    };
+  }
+
+  const saveTrialDateBtn = el.querySelector('.save-trial-date-btn');
+  if(saveTrialDateBtn){
+    saveTrialDateBtn.onclick = () => {
+      const trialDate = el.querySelector('.trial-date-input').value;
+      if(!trialDate) return;
+      saveTrialDateBtn.disabled = true;
+      supabaseClient.rpc('book_trial', {
+        input_password: sessionPassword, lead_id_input: lead.id, trial_date_input: trialDate
+      }).then(({ error }) => {
+        if(error){
+          const errEl = el.querySelector('.action-error');
+          errEl.textContent = 'Could not save trial date — please try again.';
+          errEl.style.display = 'block';
+          saveTrialDateBtn.disabled = false;
+          return;
+        }
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
+
+  const trialAttendedCheck = el.querySelector('.trial-attended-check');
+  if(trialAttendedCheck){
+    trialAttendedCheck.onchange = (e) => {
+      supabaseClient.rpc('mark_trial_attended', {
+        input_password: sessionPassword, lead_id_input: lead.id, attended_input: e.target.checked
+      }).then(({ error }) => {
+        if(error) refreshAnalytics().then(renderDash);
       });
     };
   }
@@ -1489,6 +1542,7 @@ function renderBookingsPanel(){
         </div>
         <div class="lead-meta">
           <span class="status-pill ${isToday ? 'status-expiring' : 'status-active'}">${dateStr}</span>
+          <span class="status-pill ${BOOKING_STATUS_PILL[b.status] || 'status-new'}">${BOOKING_STATUS_LABELS[b.status] || b.status}</span>
           <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted); cursor:pointer;">
             <input type="checkbox" class="attended-check" ${b.attended ? 'checked' : ''}> Attended
           </label>
@@ -1513,6 +1567,87 @@ function renderBookingsPanel(){
         if(!error) refreshAnalytics().then(renderDash);
       });
     };
+
+    list.appendChild(row);
+  });
+}
+
+const CHECKIN_SOURCE_LABELS = { qr: 'Portal QR', whatsapp: 'WhatsApp', manual: 'Manual', biometric: 'Biometric' };
+const CHECKIN_SOURCE_PILL = { qr: 'status-new', whatsapp: 'status-active', manual: 'status-lost', biometric: 'status-expiring' };
+
+const BOOKING_STATUS_LABELS = { booked: 'Booked', attended: 'Attended', no_show: 'No-show', cancelled: 'Cancelled' };
+const BOOKING_STATUS_PILL = { booked: 'status-new', attended: 'status-active', no_show: 'status-expired', cancelled: 'status-lost' };
+
+function renderCheckinsPanel(){
+  const checkins = analytics.today_checkins || [];
+
+  document.getElementById('checkinStatsRow').innerHTML = `
+    <div class="stat"><b>${checkins.length}</b>Checked in today</div>
+  `;
+
+  const activeMembers = (analytics.members || []).filter(m => m.status === 'active');
+
+  document.getElementById('addCheckinBtn').onclick = () => { addCheckinFormOpen = !addCheckinFormOpen; renderCheckinsPanel(); };
+
+  const formEl = document.getElementById('addCheckinForm');
+  formEl.className = 'add-member-form' + (addCheckinFormOpen ? ' open' : '');
+  if(addCheckinFormOpen){
+    if(activeMembers.length === 0){
+      formEl.innerHTML = `<div class="full" style="color:var(--muted); font-size:13px;">Need at least one active member to log a check-in.</div>`;
+    } else {
+      formEl.innerHTML = `
+        <div class="full">
+          <label>Member</label>
+          <select id="checkinMember">
+            ${activeMembers.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${escapeHtml(m.phone)})</option>`).join('')}
+          </select>
+        </div>
+        <div class="full"><div class="action-error" id="addCheckinError"></div><button class="small-btn" id="confirmCheckinBtn">Log check-in</button></div>
+      `;
+      document.getElementById('confirmCheckinBtn').onclick = () => {
+        const memberId = document.getElementById('checkinMember').value;
+        const errEl = document.getElementById('addCheckinError');
+        const btn = document.getElementById('confirmCheckinBtn');
+        btn.disabled = true;
+        supabaseClient.rpc('log_attendance', {
+          input_password: sessionPassword, member_id_input: memberId, source_input: 'manual'
+        }).then(({ error }) => {
+          if(error){
+            errEl.textContent = 'Could not log check-in — please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            return;
+          }
+          addCheckinFormOpen = false;
+          refreshAnalytics().then(renderDash);
+        });
+      };
+    }
+  }
+
+  const list = document.getElementById('checkinsList');
+  if(checkins.length === 0){
+    list.innerHTML = '<div class="empty-state">No check-ins yet today.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  checkins.forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'lead-card';
+    const timeStr = new Date(c.checked_in_at).toLocaleString('en-IN', { hour:'2-digit', minute:'2-digit' });
+
+    row.innerHTML = `
+      <div class="lead-row" style="cursor:default;">
+        <div class="lead-main">
+          <span class="lead-name">${escapeHtml(c.member_name)}</span>
+          <span class="lead-phone">${timeStr}</span>
+        </div>
+        <div class="lead-meta">
+          <span class="status-pill ${CHECKIN_SOURCE_PILL[c.source] || 'status-lost'}">${CHECKIN_SOURCE_LABELS[c.source] || c.source}</span>
+        </div>
+      </div>
+    `;
 
     list.appendChild(row);
   });
