@@ -672,6 +672,9 @@ function renderMembersPanel(){
       : todayLocalDateString();
 
     const activeTrainers = (analytics.trainers || []).filter(t => t.active);
+    const memberBookings = (analytics.bookings || [])
+      .filter(b => b.member_id === m.id)
+      .sort((a, b) => a.class_date.localeCompare(b.class_date) || a.start_time.localeCompare(b.start_time));
     const actionsHtml = `
       <div class="actions">
         <span style="font-size:12px; color:var(--muted);">Joined ${joinedStr}</span>
@@ -684,7 +687,7 @@ function renderMembersPanel(){
           : ''}
       </div>
       <div class="actions" style="border-top:none; margin-top:0; padding-top:0;">
-        <span style="font-size:12px; color:var(--muted);">Trainer:</span>
+        <span style="font-size:12px; color:var(--muted);">Personal trainer:</span>
         <select class="trainer-select">
           <option value="">Unassigned</option>
           ${activeTrainers.map(t => `<option value="${t.id}" ${t.id === m.trainer_id ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('')}
@@ -692,6 +695,14 @@ function renderMembersPanel(){
         <button class="small-btn secondary assign-trainer-btn">Assign</button>
       </div>
       <div class="action-error"></div>
+      <div style="margin-top:10px; padding-top:10px; border-top:1px dashed var(--line);">
+        <span style="font-size:12px; color:var(--muted); font-weight:700;">Booked classes (next 14d)</span>
+        ${memberBookings.length === 0
+          ? '<p style="font-size:12px; color:var(--muted); font-style:italic; margin:4px 0 0;">No upcoming bookings.</p>'
+          : `<ul style="margin:6px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px;">
+              ${memberBookings.map(b => `<li style="font-size:12px; color:var(--ink);">${escapeHtml(b.class_name)} — ${new Date(b.class_date).toLocaleDateString('en-IN',{weekday:'short', day:'numeric', month:'short'})}, ${formatTime(b.start_time)}</li>`).join('')}
+            </ul>`}
+      </div>
       <div class="convert-form${renewOpen ? ' open' : ''}">
         <div>
           <label>Plan</label>
@@ -858,6 +869,9 @@ function renderTrainersPanel(){
     const card = document.createElement('div');
     card.className = 'lead-card' + (editTrainerId === t.id ? ' open' : '');
 
+    const ptClients = (analytics.members || []).filter(m => m.trainer_id === t.id);
+    const teachesClasses = (analytics.classes || []).filter(c => c.trainer_id === t.id);
+
     const editing = editTrainerId === t.id;
     const editHtml = `
       <div class="add-member-form open">
@@ -871,6 +885,24 @@ function renderTrainersPanel(){
           <button class="small-btn ${t.active ? '' : 'secondary'}" style="background:${t.active ? 'var(--muted)' : 'var(--accent)'};" data-toggle="${t.active}">${t.active ? 'Deactivate' : 'Reactivate'}</button>
         </div>
       </div>
+      <div style="margin-top:14px; padding-top:14px; border-top:1px dashed var(--line); display:grid; gap:14px; grid-template-columns:1fr 1fr;">
+        <div>
+          <span style="font-size:12px; color:var(--muted); font-weight:700;">PT clients (${ptClients.length})</span>
+          ${ptClients.length === 0
+            ? '<p style="font-size:12px; color:var(--muted); font-style:italic; margin:4px 0 0;">None assigned.</p>'
+            : `<ul style="margin:6px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px;">
+                ${ptClients.map(m => `<li style="font-size:12px; color:var(--ink);">${escapeHtml(m.name)}</li>`).join('')}
+              </ul>`}
+        </div>
+        <div>
+          <span style="font-size:12px; color:var(--muted); font-weight:700;">Teaches (${teachesClasses.length})</span>
+          ${teachesClasses.length === 0
+            ? '<p style="font-size:12px; color:var(--muted); font-style:italic; margin:4px 0 0;">No classes assigned.</p>'
+            : `<ul style="margin:6px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:4px;">
+                ${teachesClasses.map(c => `<li style="font-size:12px; color:var(--ink);">${escapeHtml(c.name)} — ${DAY_NAMES[c.day_of_week]}</li>`).join('')}
+              </ul>`}
+        </div>
+      </div>
     `;
 
     card.innerHTML = `
@@ -880,6 +912,7 @@ function renderTrainersPanel(){
           <span class="lead-phone">${escapeHtml(t.specialization || 'No specialization set')}</span>
         </div>
         <div class="lead-meta">
+          <span style="font-size:12px; color:var(--muted);">${ptClients.length} PT · ${teachesClasses.length} classes</span>
           <span class="status-pill status-${t.active ? 'active' : 'cancelled'}">${t.active ? 'Active' : 'Inactive'}</span>
           <span class="chevron">▶</span>
         </div>
