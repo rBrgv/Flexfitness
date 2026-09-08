@@ -362,6 +362,7 @@ let addBookingFormOpen = false;
 let bookingFilter = 'upcoming';
 let addCheckinFormOpen = false;
 let addLeadFormOpen = false;
+let approveOpenFreezeId = null;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -1795,12 +1796,18 @@ function renderFreezesPanel(){
     return new Date(b.requested_at) - new Date(a.requested_at);
   });
 
+  const FREEZE_PILL = { pending: 'status-expiring', approved: 'status-active', denied: 'status-lost', expired: 'status-expired' };
+  const todayStr = todayLocalDateString();
+
   list.innerHTML = '';
   sorted.forEach(r => {
     const row = document.createElement('div');
     row.className = 'lead-card';
     const dateStr = new Date(r.requested_at).toLocaleDateString('en-IN', { day:'numeric', month:'short' });
-    const pillClass = r.status === 'pending' ? 'status-expiring' : r.status === 'approved' ? 'status-active' : 'status-lost';
+    const pillClass = FREEZE_PILL[r.status] || 'status-lost';
+    const endDateText = r.status === 'approved' || r.status === 'expired'
+      ? (r.freeze_end_date ? ` · until ${new Date(r.freeze_end_date).toLocaleDateString('en-IN', { day:'numeric', month:'short' })}` : ' · Indefinite')
+      : '';
 
     row.innerHTML = `
       <div class="lead-row" style="cursor:default; align-items:flex-start;">
@@ -1809,23 +1816,72 @@ function renderFreezesPanel(){
           <span class="lead-phone">${escapeHtml(r.member_phone)} · ${dateStr}${r.reason ? ' — ' + escapeHtml(r.reason) : ''}</span>
         </div>
         <div class="lead-meta">
-          <span class="status-pill ${pillClass}">${r.status[0].toUpperCase() + r.status.slice(1)}</span>
-          ${r.status === 'pending' ? `
+          <span class="status-pill ${pillClass}">${r.status[0].toUpperCase() + r.status.slice(1)}${endDateText}</span>
+          ${r.status === 'pending' && approveOpenFreezeId !== r.id ? `
             <button class="small-btn approve-freeze-btn">Approve</button>
             <button class="small-btn secondary deny-freeze-btn">Deny</button>
           ` : ''}
         </div>
       </div>
+      ${r.status === 'pending' && approveOpenFreezeId === r.id ? `
+        <div class="add-member-form open" style="margin-top:0; border-top:1px solid var(--line); border-radius:0;">
+          <div><label>Freeze end date</label><input type="date" class="freeze-end-date-input" min="${todayStr}"></div>
+          <div style="display:flex; align-items:flex-end; gap:8px;">
+            <label style="display:flex; align-items:center; gap:4px; font-size:12px; color:var(--muted); cursor:pointer; margin-bottom:9px;">
+              <input type="checkbox" class="freeze-indefinite-check"> Indefinite (no end date)
+            </label>
+          </div>
+          <div class="full">
+            <div class="action-error"></div>
+            <button class="small-btn confirm-approve-freeze-btn">Confirm approve</button>
+            <button class="small-btn secondary cancel-approve-freeze-btn">Cancel</button>
+          </div>
+        </div>
+      ` : ''}
     `;
 
-    if(r.status === 'pending'){
+    if(r.status === 'pending' && approveOpenFreezeId !== r.id){
       row.querySelector('.approve-freeze-btn').onclick = () => {
-        supabaseClient.rpc('approve_freeze_request', { input_password: sessionPassword, request_id_input: r.id })
-          .then(({ error }) => { if(!error) refreshAnalytics().then(renderDash); });
+        approveOpenFreezeId = r.id;
+        renderFreezesPanel();
       };
       row.querySelector('.deny-freeze-btn').onclick = () => {
         supabaseClient.rpc('deny_freeze_request', { input_password: sessionPassword, request_id_input: r.id })
           .then(({ error }) => { if(!error) refreshAnalytics().then(renderDash); });
+      };
+    }
+
+    if(r.status === 'pending' && approveOpenFreezeId === r.id){
+      const dateInput = row.querySelector('.freeze-end-date-input');
+      const indefiniteCheck = row.querySelector('.freeze-indefinite-check');
+      indefiniteCheck.onchange = () => { dateInput.disabled = indefiniteCheck.checked; };
+
+      row.querySelector('.cancel-approve-freeze-btn').onclick = () => {
+        approveOpenFreezeId = null;
+        renderFreezesPanel();
+      };
+      row.querySelector('.confirm-approve-freeze-btn').onclick = () => {
+        const errEl = row.querySelector('.action-error');
+        const endDate = indefiniteCheck.checked ? null : dateInput.value;
+        if(!indefiniteCheck.checked && !endDate){
+          errEl.textContent = 'Pick an end date, or check Indefinite.';
+          errEl.style.display = 'block';
+          return;
+        }
+        const btn = row.querySelector('.confirm-approve-freeze-btn');
+        btn.disabled = true;
+        supabaseClient.rpc('approve_freeze_request', {
+          input_password: sessionPassword, request_id_input: r.id, freeze_end_date_input: endDate
+        }).then(({ error }) => {
+          if(error){
+            errEl.textContent = 'Could not approve — please try again.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            return;
+          }
+          approveOpenFreezeId = null;
+          refreshAnalytics().then(renderDash);
+        });
       };
     }
 
