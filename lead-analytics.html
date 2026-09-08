@@ -375,12 +375,19 @@ function tryLogin(){
       errEl.style.display = 'block';
       return;
     }
-    sessionPassword = pw;
-    analytics = data || analytics;
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('dashScreen').style.display = 'block';
-    switchTab('leads');
-    renderDash();
+    supabaseClient.rpc('get_dashboard_access_status', { input_password: pw }).then(({ data: accessEnabled, error: accessError }) => {
+      if(!accessError && accessEnabled === false){
+        errEl.textContent = "Dashboard access has been disabled.";
+        errEl.style.display = 'block';
+        return;
+      }
+      sessionPassword = pw;
+      analytics = data || analytics;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('dashScreen').style.display = 'block';
+      switchTab('leads');
+      renderDash();
+    });
   });
 }
 

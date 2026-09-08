@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Flex Fitness — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+  :root{
+    --ink:#f5f1e8; --paper:#0a0908; --panel:#17140f; --panel-raised:#1e1a13; --line:#2c2820;
+    --accent:#e8a93d; --accent-dark:#c98b1f; --gold:#e8a93d; --muted:#a39c8c;
+    --red:#e0645a; --blue:#6fa8dc; --green:#5fb98a; --green-dark:#3f8f68;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    padding:24px 16px 60px; font-size:13px;
+  }
+  .wrap{max-width:820px; margin:0 auto;}
+  h1{font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.02em; font-size:20px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 24px;}
+  .brand{display:flex; align-items:center; gap:8px; margin-bottom:4px;}
+  .brand svg{flex:none;}
+  .brand-word{font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.02em; font-size:14px;}
+  .brand-word .gold{color:var(--gold);}
+
+  .login-card{
+    max-width:360px; margin:80px auto; background:var(--panel); border:1px solid var(--line);
+    border-radius:4px; padding:28px 24px; text-align:center; box-shadow:0 2px 4px rgba(0,0,0,0.3);
+  }
+  .login-card .brand{justify-content:center; margin-bottom:14px;}
+  .login-card input{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:4px;
+    font-size:14px; margin:8px 0; font-family:inherit; background:var(--panel-raised); color:var(--ink);
+  }
+  .login-card button{
+    width:100%; padding:11px 12px; background:var(--accent); color:#fff; border:none;
+    border-radius:4px; font-size:14px; font-weight:600; cursor:pointer; margin-top:8px; font-family:inherit;
+  }
+  .login-card button:hover{background:var(--accent-dark);}
+  .error-text{color:var(--red); font-size:12px; margin-top:10px; display:none;}
+
+  .tabs{display:flex; gap:4px; margin-bottom:20px; border-bottom:1px solid var(--line); overflow-x:auto;}
+  .tab-btn{
+    background:none; border:none; padding:11px 14px; font-size:13px; font-weight:600;
+    color:var(--muted); cursor:pointer; border-bottom:3px solid transparent; font-family:inherit; white-space:nowrap;
+  }
+  .tab-btn:hover{color:var(--ink);}
+  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:20px; margin-bottom:16px;}
+  .card h2{font-size:14px; font-weight:700; margin:0 0 14px; text-transform:uppercase; letter-spacing:0.02em;}
+  .field{margin-bottom:14px;}
+  .field label{display:block; font-size:11px; color:var(--muted); font-weight:600; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.02em;}
+  .field input, .field select, .field textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:4px;
+    font-size:13px; font-family:inherit; background:var(--panel-raised); color:var(--ink);
+  }
+  .field textarea{resize:vertical; min-height:70px;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .checkbox-field{display:flex; align-items:center; gap:8px; margin-bottom:14px;}
+  .checkbox-field label{margin:0; text-transform:none; font-size:13px; color:var(--ink); font-weight:400;}
+
+  .save-btn{
+    background:var(--accent); color:#fff; border:none; border-radius:4px; padding:10px 18px;
+    font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .save-btn:hover{background:var(--accent-dark);}
+  .save-btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .save-note{font-size:12px; color:var(--green); margin-left:10px; display:none;}
+
+  .toggle-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line);}
+  .toggle-row:last-child{border-bottom:none;}
+  .toggle-label{font-size:13px; font-weight:600;}
+  .toggle-sub{font-size:11px; color:var(--muted); margin-top:2px;}
+  .switch{position:relative; width:42px; height:24px; flex:none;}
+  .switch input{opacity:0; width:0; height:0;}
+  .switch .track{position:absolute; inset:0; background:var(--line); border-radius:12px; cursor:pointer; transition:background 0.15s;}
+  .switch .track::before{content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:transform 0.15s;}
+  .switch input:checked + .track{background:var(--green-dark);}
+  .switch input:checked + .track::before{transform:translateX(18px);}
+  .switch input:disabled + .track{opacity:0.4; cursor:not-allowed;}
+
+  .key-row{padding:14px 0; border-bottom:1px solid var(--line);}
+  .key-row:last-child{border-bottom:none;}
+  .key-row-top{display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;}
+  .key-name{font-size:13px; font-weight:600;}
+  .key-meta{font-size:11px; color:var(--muted);}
+  .key-input-row{display:flex; gap:8px;}
+  .key-input-row input{flex:1;}
+  .key-input-row button{flex:none;}
+
+  .loading{text-align:center; color:var(--muted); padding:30px; font-size:13px;}
+</style>
+</head>
+<body>
+
+<div id="loginScreen" class="login-card">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+      <path d="M4 6h9l3 6 3-6h9l-8 10 8 10h-9l-3-6-3 6H4l8-10Z" fill="none" stroke="#e8a93d" stroke-width="2.2" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-word">Flex <span class="gold">Fitness</span></span>
+  </div>
+  <p class="sub" style="margin-bottom:16px;">Admin</p>
+  <input type="email" id="emailInput" placeholder="Email" autocomplete="username">
+  <input type="password" id="passwordInput" placeholder="Password" autocomplete="current-password">
+  <button onclick="trySignIn()">Sign in</button>
+  <div class="error-text" id="loginError"></div>
+</div>
+
+<div class="wrap" id="adminScreen" style="display:none;">
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+      <path d="M4 6h9l3 6 3-6h9l-8 10 8 10h-9l-3-6-3 6H4l8-10Z" fill="none" stroke="#e8a93d" stroke-width="2.2" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-word">Flex <span class="gold">Fitness</span></span>
+  </div>
+  <h1>Admin</h1>
+  <p class="sub">Bot config, feature toggles, and the API key vault — signed in as <span id="userEmail"></span>. <a href="#" onclick="signOut(); return false;" style="color:var(--muted);">Sign out</a></p>
+
+  <div class="tabs">
+    <button class="tab-btn active" id="tabConfigBtn">Bot Config</button>
+    <button class="tab-btn" id="tabTogglesBtn">Feature Toggles</button>
+    <button class="tab-btn" id="tabKeysBtn">API Keys</button>
+  </div>
+
+  <div id="configPanel"><div class="loading">Loading…</div></div>
+  <div id="togglesPanel" style="display:none;"><div class="loading">Loading…</div></div>
+  <div id="keysPanel" style="display:none;"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://tvdjrdsormftjzmghgtx.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2ZGpyZHNvcm1mdGp6bWdoZ3R4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MjU5NzQsImV4cCI6MjEwMDUwMTk3NH0.U_NayJkuHuvZPr--LJ3EzfvjPrd9ha-564DEhbuqkBE";
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let activeTab = 'config';
+
+async function init(){
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if(session){
+    showAdmin(session);
+  }
+}
+
+async function trySignIn(){
+  const email = document.getElementById('emailInput').value.trim();
+  const password = document.getElementById('passwordInput').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if(error){
+    errEl.textContent = 'Incorrect email or password.';
+    errEl.style.display = 'block';
+    return;
+  }
+  showAdmin(data.session);
+}
+
+function showAdmin(session){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('adminScreen').style.display = 'block';
+  document.getElementById('userEmail').textContent = session.user.email;
+  switchTab('config');
+}
+
+async function signOut(){
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
+
+function switchTab(tab){
+  activeTab = tab;
+  document.getElementById('configPanel').style.display = tab === 'config' ? 'block' : 'none';
+  document.getElementById('togglesPanel').style.display = tab === 'toggles' ? 'block' : 'none';
+  document.getElementById('keysPanel').style.display = tab === 'keys' ? 'block' : 'none';
+  document.getElementById('tabConfigBtn').className = 'tab-btn' + (tab === 'config' ? ' active' : '');
+  document.getElementById('tabTogglesBtn').className = 'tab-btn' + (tab === 'toggles' ? ' active' : '');
+  document.getElementById('tabKeysBtn').className = 'tab-btn' + (tab === 'keys' ? ' active' : '');
+  if(tab === 'config') loadConfig();
+  if(tab === 'toggles') loadToggles();
+  if(tab === 'keys') loadKeys();
+}
+document.getElementById('tabConfigBtn').onclick = () => switchTab('config');
+document.getElementById('tabTogglesBtn').onclick = () => switchTab('toggles');
+document.getElementById('tabKeysBtn').onclick = () => switchTab('keys');
+
+// ---------- Bot Config ----------
+
+async function loadConfig(){
+  const panel = document.getElementById('configPanel');
+  const { data, error } = await supabaseClient.from('bot_config').select('*').eq('id', 1).maybeSingle();
+  if(error || !data){
+    panel.innerHTML = '<div class="loading">Could not load bot config.</div>';
+    return;
+  }
+  renderConfigForm(data);
+}
+
+function field(label, id, value, type){
+  type = type || 'text';
+  if(type === 'textarea'){
+    return `<div class="field"><label>${label}</label><textarea id="${id}">${escapeHtml(value || '')}</textarea></div>`;
+  }
+  return `<div class="field"><label>${label}</label><input type="${type}" id="${id}" value="${escapeHtml(value || '')}"></div>`;
+}
+
+function renderConfigForm(c){
+  const panel = document.getElementById('configPanel');
+  panel.innerHTML = `
+    <div class="card">
+      <h2>Identity &amp; Tone</h2>
+      ${field('Tone', 'cf_tone', c.tone)}
+      ${field('Response length', 'cf_response_length', c.response_length)}
+      <div class="checkbox-field"><input type="checkbox" id="cf_emojis_allowed" ${c.emojis_allowed ? 'checked' : ''}><label for="cf_emojis_allowed">Emojis allowed</label></div>
+      ${field('Languages', 'cf_languages', c.languages)}
+      ${field('Greeting message', 'cf_greeting_message', c.greeting_message, 'textarea')}
+    </div>
+
+    <div class="card">
+      <h2>Hours</h2>
+      <div class="field-row">
+        ${field('Mon–Sat', 'cf_hours_weekday', c.hours_weekday)}
+        ${field('Sunday', 'cf_hours_sunday', c.hours_sunday)}
+      </div>
+      <div class="field-row">
+        ${field('Quiet hours', 'cf_quiet_hours', c.quiet_hours)}
+        ${field('Holiday policy', 'cf_holiday_policy', c.holiday_policy)}
+      </div>
+      ${field('Address', 'cf_address', c.address)}
+      ${field('Contact numbers', 'cf_contact_numbers', c.contact_numbers)}
+    </div>
+
+    <div class="card">
+      <h2>Pricing</h2>
+      <div class="field-row">
+        ${field('Monthly', 'cf_monthly_price', c.monthly_price)}
+        ${field('3 months', 'cf_three_month_price', c.three_month_price)}
+      </div>
+      <div class="field-row">
+        ${field('6 months', 'cf_six_month_price', c.six_month_price)}
+        ${field('Yearly', 'cf_yearly_price', c.yearly_price)}
+      </div>
+      ${field('Joining fee', 'cf_joining_fee', c.joining_fee)}
+      ${field('Payment methods', 'cf_payment_methods', c.payment_methods)}
+    </div>
+
+    <div class="card">
+      <h2>Policies</h2>
+      ${field('Trial policy', 'cf_trial_policy', c.trial_policy, 'textarea')}
+      ${field('Discount policy', 'cf_discount_policy', c.discount_policy, 'textarea')}
+      ${field('Freeze policy', 'cf_freeze_policy', c.freeze_policy, 'textarea')}
+      ${field('Transfer / cancellation policy', 'cf_transfer_cancel_policy', c.transfer_cancel_policy)}
+      ${field('Refund policy', 'cf_refund_policy', c.refund_policy)}
+      ${field('On-expiry behavior', 'cf_expiry_policy', c.expiry_policy)}
+      ${field('Complaints policy', 'cf_complaints_policy', c.complaints_policy)}
+    </div>
+
+    <div class="card">
+      <h2>Guardrails &amp; Escalation</h2>
+      ${field('Abusive-message response (exact text)', 'cf_abusive_response', c.abusive_response)}
+      ${field('Off-topic response (exact text)', 'cf_off_topic_response', c.off_topic_response)}
+      ${field('Confidential-info refusal', 'cf_confidential_refusal_response', c.confidential_refusal_response, 'textarea')}
+      ${field('Backup contact', 'cf_backup_contact', c.backup_contact)}
+      <div class="field">
+        <label>Escalation matrix (JSON — category / responsible / response_time / contact_method)</label>
+        <textarea id="cf_escalation_matrix" style="min-height:180px; font-family:ui-monospace,monospace; font-size:12px;">${escapeHtml(JSON.stringify(c.escalation_matrix || [], null, 2))}</textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <button class="save-btn" id="saveConfigBtn">Save changes</button>
+      <span class="save-note" id="configSaveNote">Saved — the bot picks this up within a minute.</span>
+      <div class="error-text" id="configSaveError"></div>
+    </div>
+  `;
+
+  document.getElementById('saveConfigBtn').onclick = () => saveConfig();
+}
+
+async function saveConfig(){
+  const btn = document.getElementById('saveConfigBtn');
+  const errEl = document.getElementById('configSaveError');
+  const noteEl = document.getElementById('configSaveNote');
+  errEl.style.display = 'none';
+  noteEl.style.display = 'none';
+
+  let escalationMatrix;
+  try {
+    escalationMatrix = JSON.parse(document.getElementById('cf_escalation_matrix').value);
+  } catch (e) {
+    errEl.textContent = 'Escalation matrix is not valid JSON.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const patch = {
+    tone: document.getElementById('cf_tone').value,
+    response_length: document.getElementById('cf_response_length').value,
+    emojis_allowed: document.getElementById('cf_emojis_allowed').checked,
+    languages: document.getElementById('cf_languages').value,
+    greeting_message: document.getElementById('cf_greeting_message').value,
+    hours_weekday: document.getElementById('cf_hours_weekday').value,
+    hours_sunday: document.getElementById('cf_hours_sunday').value,
+    quiet_hours: document.getElementById('cf_quiet_hours').value,
+    holiday_policy: document.getElementById('cf_holiday_policy').value,
+    address: document.getElementById('cf_address').value,
+    contact_numbers: document.getElementById('cf_contact_numbers').value,
+    monthly_price: document.getElementById('cf_monthly_price').value,
+    three_month_price: document.getElementById('cf_three_month_price').value,
+    six_month_price: document.getElementById('cf_six_month_price').value,
+    yearly_price: document.getElementById('cf_yearly_price').value,
+    joining_fee: document.getElementById('cf_joining_fee').value,
+    payment_methods: document.getElementById('cf_payment_methods').value,
+    trial_policy: document.getElementById('cf_trial_policy').value,
+    discount_policy: document.getElementById('cf_discount_policy').value,
+    freeze_policy: document.getElementById('cf_freeze_policy').value,
+    transfer_cancel_policy: document.getElementById('cf_transfer_cancel_policy').value,
+    refund_policy: document.getElementById('cf_refund_policy').value,
+    expiry_policy: document.getElementById('cf_expiry_policy').value,
+    complaints_policy: document.getElementById('cf_complaints_policy').value,
+    abusive_response: document.getElementById('cf_abusive_response').value,
+    off_topic_response: document.getElementById('cf_off_topic_response').value,
+    confidential_refusal_response: document.getElementById('cf_confidential_refusal_response').value,
+    backup_contact: document.getElementById('cf_backup_contact').value,
+    escalation_matrix: escalationMatrix,
+    updated_at: new Date().toISOString(),
+  };
+
+  btn.disabled = true;
+  const { error } = await supabaseClient.from('bot_config').update(patch).eq('id', 1);
+  btn.disabled = false;
+  if(error){
+    errEl.textContent = 'Could not save — please try again.';
+    errEl.style.display = 'block';
+    return;
+  }
+  noteEl.style.display = 'inline';
+  setTimeout(() => { noteEl.style.display = 'none'; }, 3000);
+}
+
+// ---------- Feature Toggles ----------
+
+async function loadToggles(){
+  const panel = document.getElementById('togglesPanel');
+  const { data, error } = await supabaseClient.from('feature_toggles').select('*').order('key');
+  if(error || !data){
+    panel.innerHTML = '<div class="loading">Could not load feature toggles.</div>';
+    return;
+  }
+  panel.innerHTML = `
+    <div class="card">
+      <h2>Feature Toggles</h2>
+      ${data.map(t => `
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">${escapeHtml(t.label)}</div>
+            ${t.key === 'payments' ? '<div class="toggle-sub">Not built yet — this switch has no effect.</div>' : ''}
+          </div>
+          <label class="switch">
+            <input type="checkbox" data-key="${t.key}" ${t.enabled ? 'checked' : ''} ${t.key === 'payments' ? 'disabled' : ''}>
+            <span class="track"></span>
+          </label>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  panel.querySelectorAll('input[data-key]').forEach(input => {
+    input.onchange = async (e) => {
+      const key = e.target.dataset.key;
+      const enabled = e.target.checked;
+      e.target.disabled = true;
+      const { error } = await supabaseClient.from('feature_toggles').update({ enabled, updated_at: new Date().toISOString() }).eq('key', key);
+      e.target.disabled = false;
+      if(error) e.target.checked = !enabled;
+    };
+  });
+}
+
+// ---------- API Keys ----------
+
+const API_KEY_DEFS = [
+  { key: 'openai_api_key', label: 'OpenAI API key' },
+  { key: 'whatsapp_token', label: 'WhatsApp Business API token' },
+  { key: 'razorpay_key_id', label: 'Razorpay key ID (not built yet)' },
+  { key: 'razorpay_key_secret', label: 'Razorpay key secret (not built yet)' },
+];
+
+async function loadKeys(){
+  const panel = document.getElementById('keysPanel');
+  const { data, error } = await supabaseClient.from('api_keys').select('*');
+  const existing = {};
+  (data || []).forEach(row => { existing[row.key] = row; });
+
+  panel.innerHTML = `
+    <div class="card">
+      <h2>API Key Vault</h2>
+      <p class="sub" style="margin-bottom:16px;">The bot reads its real keys from Render's environment variables — this is a masked record only, so you can track what's set and when it last changed. Keep Render in sync manually when you rotate a key. Values are never stored or shown in plain text here.</p>
+      ${API_KEY_DEFS.map(def => {
+        const row = existing[def.key];
+        return `
+          <div class="key-row">
+            <div class="key-row-top">
+              <span class="key-name">${escapeHtml(def.label)}</span>
+              <span class="key-meta">${row ? `Currently: ${escapeHtml(row.masked_preview)} · updated ${new Date(row.updated_at).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}` : 'Not set'}</span>
+            </div>
+            <div class="key-input-row">
+              <input type="password" id="key_${def.key}" placeholder="Paste new value to update" autocomplete="off">
+              <button class="save-btn" data-key="${def.key}">Save</button>
+            </div>
+          </div>
+        `;
+      }).join('')}
+      <div class="error-text" id="keysSaveError"></div>
+    </div>
+  `;
+
+  panel.querySelectorAll('button[data-key]').forEach(btn => {
+    btn.onclick = async () => {
+      const key = btn.dataset.key;
+      const input = document.getElementById(`key_${key}`);
+      const value = input.value;
+      const errEl = document.getElementById('keysSaveError');
+      errEl.style.display = 'none';
+      if(!value){
+        errEl.textContent = 'Enter a value to save.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const maskedPreview = value.length > 4 ? `••••${value.slice(-4)}` : '••••';
+      btn.disabled = true;
+      const { error } = await supabaseClient.from('api_keys').upsert({ key, masked_preview: maskedPreview, updated_at: new Date().toISOString() });
+      btn.disabled = false;
+      input.value = ''; // clear immediately — the real value is never kept in the DOM state either
+      if(error){
+        errEl.textContent = 'Could not save — please try again.';
+        errEl.style.display = 'block';
+        return;
+      }
+      loadKeys();
+    };
+  });
+}
+
+function escapeHtml(str){
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+init();
+</script>
+
+</body>
+</html>
