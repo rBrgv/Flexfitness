@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Flex Fitness — Lead Analytics</title>
+<title>Flex Fitness — Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   :root{
-    --ink:#12181B; --paper:#FBF9F6; --panel:#FFFFFF; --line:#E4E0D8;
-    --accent:#1F6F5C; --accent-dark:#134A3D; --gold:#C08A3E; --muted:#6B7280;
-    --red:#B4491F; --blue:#2563A6;
+    --ink:#f5f1e8; --paper:#0a0908; --panel:#17140f; --panel-raised:#1e1a13; --line:#2c2820;
+    --accent:#e8a93d; --accent-dark:#c98b1f; --gold:#e8a93d; --muted:#a39c8c;
+    --red:#e0645a; --blue:#6fa8dc; --green:#5fb98a; --green-dark:#3f8f68;
   }
   *{box-sizing:border-box;}
   body{
@@ -18,44 +21,50 @@
     padding:24px 16px 60px;
   }
   .wrap{max-width:1000px; margin:0 auto;}
-  h1{font-size:22px; margin:0 0 4px;}
+  h1{font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.02em; font-size:20px; margin:0 0 4px;}
   .sub{color:var(--muted); font-size:14px; margin:0 0 24px;}
 
+  .brand{display:flex; align-items:center; gap:10px; margin-bottom:4px;}
+  .brand svg{flex:none;}
+  .brand-word{font-family:"Oswald",sans-serif; font-weight:600; text-transform:uppercase; letter-spacing:0.02em; font-size:15px;}
+  .brand-word .gold{color:var(--accent);}
+
   .login-card{
-    max-width:360px; margin:80px auto; background:#fff; border:1px solid var(--line);
+    max-width:360px; margin:80px auto; background:var(--panel); border:1px solid var(--line);
     border-radius:14px; padding:28px 24px; text-align:center;
   }
+  .login-card .brand{justify-content:center; margin-bottom:14px;}
   .login-card input{
     width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:10px;
-    font-size:15px; margin:16px 0; font-family:inherit;
+    font-size:15px; margin:16px 0; font-family:inherit; background:var(--panel-raised); color:var(--ink);
   }
   .login-card button, .btn{
-    width:100%; background:var(--accent); color:#fff; border:none; border-radius:10px;
+    width:100%; background:var(--accent); color:var(--paper); border:none; border-radius:10px;
     padding:13px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit;
   }
   .error-text{color:var(--red); font-size:13px; margin-top:8px; display:none;}
 
   .stats-row{display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap;}
-  .stat{background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:13px; min-width:96px;}
-  .stat b{display:block; font-size:22px; color:var(--accent-dark);}
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:13px; min-width:96px;}
+  .stat b{display:block; font-size:22px; color:var(--accent);}
   .stat.escalated b{color:var(--red);}
 
   .filters{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px;}
   .filter-chip{
-    border:1.5px solid var(--line); background:#fff; border-radius:20px;
+    border:1.5px solid var(--line); background:var(--panel); border-radius:20px;
     padding:7px 14px; font-size:13px; cursor:pointer; color:var(--muted);
   }
-  .filter-chip.active{border-color:var(--accent); background:#EAF3F0; color:var(--accent-dark); font-weight:700;}
+  .filter-chip.active{border-color:var(--accent); background:rgba(232,169,61,0.12); color:var(--accent); font-weight:700;}
 
   .lead-card{
-    background:#fff; border:1px solid var(--line); border-radius:12px;
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
     margin-bottom:12px; overflow:hidden;
   }
   .lead-row{
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     padding:14px 18px; cursor:pointer;
   }
-  .lead-row:hover{background:#FAFAF8;}
+  .lead-row:hover{background:var(--panel-raised);}
   .lead-main{display:flex; align-items:center; gap:10px; min-width:0;}
   .lead-name{font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .lead-phone{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
@@ -63,21 +72,21 @@
     font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; text-transform:capitalize;
     white-space:nowrap;
   }
-  .status-new{background:#EAF0FB; color:var(--blue);}
-  .status-contacted{background:#FFF3E0; color:var(--gold);}
-  .status-trial_booked{background:#EAF3F0; color:var(--accent-dark);}
-  .status-converted{background:#134A3D; color:#fff;}
-  .status-lost{background:#F3F0EA; color:var(--muted);}
+  .status-new{background:rgba(111,168,220,0.15); color:var(--blue);}
+  .status-contacted{background:rgba(232,169,61,0.15); color:var(--gold);}
+  .status-trial_booked{background:rgba(95,185,138,0.15); color:var(--green);}
+  .status-converted{background:var(--green-dark); color:var(--ink);}
+  .status-lost{background:var(--panel-raised); color:var(--muted);}
   .lead-meta{display:flex; align-items:center; gap:14px; font-size:12px; color:var(--muted); flex-shrink:0;}
   .escalated-badge{color:var(--red); font-weight:700;}
   .chevron{transition:transform 0.15s; color:var(--muted); font-size:12px;}
   .lead-card.open .chevron{transform:rotate(90deg);}
 
-  .thread{display:none; border-top:1px solid var(--line); padding:14px 18px; background:#FAFAF8;}
+  .thread{display:none; border-top:1px solid var(--line); padding:14px 18px; background:var(--panel-raised);}
   .lead-card.open .thread{display:block;}
   .msg{max-width:75%; margin-bottom:8px; padding:8px 12px; border-radius:10px; font-size:13px; line-height:1.4;}
-  .msg.inbound{background:#fff; border:1px solid var(--line); margin-right:auto;}
-  .msg.outbound{background:var(--accent); color:#fff; margin-left:auto;}
+  .msg.inbound{background:var(--panel); border:1px solid var(--line); margin-right:auto;}
+  .msg.outbound{background:var(--accent); color:var(--paper); margin-left:auto;}
   .msg.escalated{border:1.5px solid var(--red);}
   .msg-time{font-size:10px; opacity:0.65; margin-top:3px;}
   .no-thread{font-size:12px; color:var(--muted); font-style:italic;}
@@ -88,26 +97,26 @@
   }
   .actions select{
     padding:7px 10px; border:1.5px solid var(--line); border-radius:8px;
-    font-size:12px; font-family:inherit; background:#fff;
+    font-size:12px; font-family:inherit; background:var(--panel-raised); color:var(--ink);
   }
   .actions .small-btn{
-    background:var(--accent); color:#fff; border:none; border-radius:8px;
+    background:var(--accent); color:var(--paper); border:none; border-radius:8px;
     padding:8px 12px; font-size:12px; font-weight:700; cursor:pointer; font-family:inherit;
   }
-  .actions .small-btn.secondary{background:var(--gold);}
+  .actions .small-btn.secondary{background:transparent; border:1.5px solid var(--accent); color:var(--accent);}
   .actions .small-btn:disabled{opacity:0.5; cursor:not-allowed;}
-  .member-note{font-size:12px; color:var(--accent-dark); font-weight:700;}
+  .member-note{font-size:12px; color:var(--green); font-weight:700;}
   .action-error{color:var(--red); font-size:12px; margin-top:6px; display:none;}
 
   .convert-form{
-    display:none; margin-top:12px; padding:12px; background:#fff;
+    display:none; margin-top:12px; padding:12px; background:var(--panel-raised);
     border:1px solid var(--line); border-radius:10px;
   }
   .convert-form.open{display:grid; gap:8px; grid-template-columns:1fr 1fr;}
   .convert-form label{font-size:11px; color:var(--muted); display:block; margin-bottom:3px;}
   .convert-form input, .convert-form select{
     width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px;
-    font-size:13px; font-family:inherit;
+    font-size:13px; font-family:inherit; background:var(--panel); color:var(--ink);
   }
   .convert-form .full{grid-column:1 / -1;}
 
@@ -124,26 +133,26 @@
     color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; font-family:inherit;
     white-space:nowrap; flex:none;
   }
-  .tab-btn.active{color:var(--accent-dark); border-bottom-color:var(--accent);}
+  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
 
-  .status-active{background:#EAF3F0; color:var(--accent-dark);}
-  .status-expiring{background:#FFF3E0; color:var(--gold);}
-  .status-expired{background:#FBE9E4; color:var(--red);}
-  .status-frozen{background:#EAF0FB; color:var(--blue);}
-  .status-cancelled{background:#F3F0EA; color:var(--muted);}
+  .status-active{background:rgba(95,185,138,0.15); color:var(--green);}
+  .status-expiring{background:rgba(232,169,61,0.15); color:var(--gold);}
+  .status-expired{background:rgba(224,100,90,0.15); color:var(--red);}
+  .status-frozen{background:rgba(111,168,220,0.15); color:var(--blue);}
+  .status-cancelled{background:var(--panel-raised); color:var(--muted);}
   .expiry-badge{font-size:11px; font-weight:700; color:var(--muted);}
   .expiry-badge.urgent{color:var(--red);}
   .expiry-badge.soon{color:var(--gold);}
 
   .add-member-form{
-    display:none; margin-bottom:16px; padding:14px; background:#fff;
+    display:none; margin-bottom:16px; padding:14px; background:var(--panel-raised);
     border:1px solid var(--line); border-radius:12px;
   }
   .add-member-form.open{display:grid; gap:8px; grid-template-columns:1fr 1fr;}
   .add-member-form label{font-size:11px; color:var(--muted); display:block; margin-bottom:3px;}
   .add-member-form input, .add-member-form select{
     width:100%; padding:8px 10px; border:1.5px solid var(--line); border-radius:8px;
-    font-size:13px; font-family:inherit;
+    font-size:13px; font-family:inherit; background:var(--panel); color:var(--ink);
   }
   .add-member-form .full{grid-column:1 / -1;}
 </style>
@@ -152,7 +161,13 @@
 
 <div class="wrap" id="loginScreen">
   <div class="login-card">
-    <h1 style="font-size:18px;">Lead Analytics</h1>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+        <path d="M4 6h9l3 6 3-6h9l-8 10 8 10h-9l-3-6-3 6H4l8-10Z" fill="none" stroke="#e8a93d" stroke-width="2.2" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-word">Flex <span class="gold">Fitness</span></span>
+    </div>
+    <h1 style="font-size:16px;">Analytics</h1>
     <p class="sub">Enter the password to view leads and conversations.</p>
     <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter') tryLogin()">
     <button onclick="tryLogin()">View analytics</button>
@@ -161,7 +176,13 @@
 </div>
 
 <div class="wrap" id="dashScreen" style="display:none;">
-  <h1>Flex Fitness — Analytics</h1>
+  <div class="brand">
+    <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+      <path d="M4 6h9l3 6 3-6h9l-8 10 8 10h-9l-3-6-3 6H4l8-10Z" fill="none" stroke="#e8a93d" stroke-width="2.2" stroke-linejoin="round"/>
+    </svg>
+    <span class="brand-word">Flex <span class="gold">Fitness</span></span>
+  </div>
+  <h1>Analytics</h1>
   <p class="sub">Leads from the WhatsApp bot, and members converted from them.</p>
 
   <div class="tabs">
