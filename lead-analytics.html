@@ -241,11 +241,14 @@
     <button class="tab-btn" id="tabCheckinsBtn">Check-ins</button>
     <button class="tab-btn" id="tabFreezesBtn">Freezes</button>
     <button class="tab-btn" id="tabIssuesBtn">Issues</button>
+    <button class="tab-btn" id="tabReportsBtn">Reports</button>
   </div>
 
   <div id="leadsPanel">
     <div class="stats-row" id="statsRow"></div>
     <div class="filters" id="filterRow"></div>
+    <button class="small-btn" id="addLeadBtn" style="margin-bottom:14px; width:auto;">+ Add lead</button>
+    <div class="add-member-form" id="addLeadForm"></div>
     <div id="leadsList"><div class="loading">Loading leads…</div></div>
     <div id="leadDetail" style="display:none;"></div>
   </div>
@@ -299,6 +302,40 @@
     <div id="issuesList"></div>
   </div>
 
+  <div id="reportsPanel" style="display:none;">
+    <div class="record-page" style="margin-bottom:16px;">
+      <div class="record-body">
+        <div class="related-list" style="margin-top:0; padding-top:0; border-top:none;">
+          <p class="related-list-title">Lead source conversion</p>
+          <div style="display:flex; gap:10px; align-items:flex-end; margin-bottom:14px; flex-wrap:wrap;">
+            <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:3px;">From</label><input type="date" id="sourceFromDate"></div>
+            <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:3px;">To</label><input type="date" id="sourceToDate"></div>
+            <button class="small-btn" id="runSourceReportBtn" style="width:auto;">Run</button>
+          </div>
+          <div id="sourceReportList"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="record-page" style="margin-bottom:16px;">
+      <div class="record-body">
+        <div class="related-list" style="margin-top:0; padding-top:0; border-top:none;">
+          <p class="related-list-title">Class capacity utilization <span class="count">last 30 days</span></p>
+          <div id="capacityReportList"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="record-page">
+      <div class="record-body">
+        <div class="related-list" style="margin-top:0; padding-top:0; border-top:none;">
+          <p class="related-list-title">Trainer session summary <span class="count">this month, so far</span></p>
+          <div id="trainerReportList"><div class="loading">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <p style="text-align:center; color:var(--muted); font-size:12px; margin-top:28px;">Powered by CampaignWise</p>
 </div>
 
@@ -324,6 +361,7 @@ let editClassId = null;
 let addBookingFormOpen = false;
 let bookingFilter = 'upcoming';
 let addCheckinFormOpen = false;
+let addLeadFormOpen = false;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -356,6 +394,7 @@ function switchTab(tab){
   document.getElementById('checkinsPanel').style.display = tab === 'checkins' ? 'block' : 'none';
   document.getElementById('freezesPanel').style.display = tab === 'freezes' ? 'block' : 'none';
   document.getElementById('issuesPanel').style.display = tab === 'issues' ? 'block' : 'none';
+  document.getElementById('reportsPanel').style.display = tab === 'reports' ? 'block' : 'none';
   document.getElementById('tabLeadsBtn').className = 'tab-btn' + (tab === 'leads' ? ' active' : '');
   document.getElementById('tabMembersBtn').className = 'tab-btn' + (tab === 'members' ? ' active' : '');
   document.getElementById('tabTrainersBtn').className = 'tab-btn' + (tab === 'trainers' ? ' active' : '');
@@ -364,6 +403,8 @@ function switchTab(tab){
   document.getElementById('tabCheckinsBtn').className = 'tab-btn' + (tab === 'checkins' ? ' active' : '');
   document.getElementById('tabFreezesBtn').className = 'tab-btn' + (tab === 'freezes' ? ' active' : '');
   document.getElementById('tabIssuesBtn').className = 'tab-btn' + (tab === 'issues' ? ' active' : '');
+  document.getElementById('tabReportsBtn').className = 'tab-btn' + (tab === 'reports' ? ' active' : '');
+  if(tab === 'reports') loadReports();
 }
 document.getElementById('tabLeadsBtn').onclick = () => switchTab('leads');
 document.getElementById('tabMembersBtn').onclick = () => switchTab('members');
@@ -373,6 +414,7 @@ document.getElementById('tabBookingsBtn').onclick = () => switchTab('bookings');
 document.getElementById('tabCheckinsBtn').onclick = () => switchTab('checkins');
 document.getElementById('tabFreezesBtn').onclick = () => switchTab('freezes');
 document.getElementById('tabIssuesBtn').onclick = () => switchTab('issues');
+document.getElementById('tabReportsBtn').onclick = () => switchTab('reports');
 
 function renderDash(){
   renderLeadsPanel();
@@ -482,6 +524,53 @@ function renderLeadsPanel(){
   escChip.textContent = `Escalated (${analytics.escalated_leads})`;
   escChip.onclick = () => { activeFilter = 'escalated'; renderDash(); };
   filterRow.appendChild(escChip);
+
+  document.getElementById('addLeadBtn').onclick = () => { addLeadFormOpen = !addLeadFormOpen; renderLeadsPanel(); };
+  const leadFormEl = document.getElementById('addLeadForm');
+  leadFormEl.className = 'add-member-form' + (addLeadFormOpen ? ' open' : '');
+  leadFormEl.innerHTML = `
+    <div class="full"><label>Name</label><input type="text" id="addLeadName" placeholder="Full name"></div>
+    <div><label>Phone</label><input type="text" id="addLeadPhone" placeholder="e.g. 919876543210"></div>
+    <div>
+      <label>How did they hear about us?</label>
+      <select id="addLeadSource">
+        <option value="phone">Phone call</option>
+        <option value="walk-in">Walk-in</option>
+        <option value="referral">Referral</option>
+        <option value="instagram">Instagram</option>
+        <option value="pamphlet">Pamphlet</option>
+        <option value="website">Website</option>
+      </select>
+    </div>
+    <div class="full"><div class="action-error" id="addLeadError"></div><button class="small-btn" id="confirmAddLeadBtn">Add lead</button></div>
+  `;
+  if(addLeadFormOpen){
+    document.getElementById('confirmAddLeadBtn').onclick = () => {
+      const name = document.getElementById('addLeadName').value.trim();
+      const phone = document.getElementById('addLeadPhone').value.trim();
+      const source = document.getElementById('addLeadSource').value;
+      const errEl = document.getElementById('addLeadError');
+      if(!name || !phone){
+        errEl.textContent = 'Name and phone are required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('confirmAddLeadBtn');
+      btn.disabled = true;
+      supabaseClient.rpc('add_lead', {
+        input_password: sessionPassword, phone_input: phone, name_input: name, source_input: source
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = 'Could not add lead — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        addLeadFormOpen = false;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
 
   const leads = (analytics.leads || []).filter(l => {
     if(activeFilter === 'all') return true;
@@ -1781,6 +1870,76 @@ function renderIssuesPanel(){
     }
 
     list.appendChild(row);
+  });
+}
+
+const SOURCE_LABELS = { website: 'Website', instagram: 'Instagram', pamphlet: 'Pamphlet', referral: 'Referral', 'walk-in': 'Walk-in', phone: 'Phone', whatsapp: 'WhatsApp (untracked)' };
+
+function loadReports(){
+  const fromInput = document.getElementById('sourceFromDate');
+  const toInput = document.getElementById('sourceToDate');
+  if(!fromInput.value){
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    fromInput.value = d.toISOString().slice(0, 10);
+  }
+  if(!toInput.value){
+    toInput.value = todayLocalDateString();
+  }
+  document.getElementById('runSourceReportBtn').onclick = runSourceReport;
+  runSourceReport();
+  loadCapacityReport();
+  loadTrainerReport();
+}
+
+function runSourceReport(){
+  const list = document.getElementById('sourceReportList');
+  list.innerHTML = '<div class="loading">Loading…</div>';
+  const from = document.getElementById('sourceFromDate').value;
+  const to = document.getElementById('sourceToDate').value;
+  supabaseClient.rpc('get_lead_source_conversion', {
+    input_password: sessionPassword, from_date: from, to_date: to
+  }).then(({ data, error }) => {
+    if(error || !data || data.length === 0){
+      list.innerHTML = '<div class="empty-state">No leads in this date range.</div>';
+      return;
+    }
+    list.innerHTML = data.map(row => {
+      const rate = row.total > 0 ? Math.round((row.converted / row.total) * 100) : 0;
+      return `<div class="related-row"><span>${SOURCE_LABELS[row.source] || row.source}</span><span style="color:var(--muted);">${row.converted}/${row.total} converted · <b style="color:var(--ink);">${rate}%</b></span></div>`;
+    }).join('');
+  });
+}
+
+function loadCapacityReport(){
+  const list = document.getElementById('capacityReportList');
+  supabaseClient.rpc('get_class_capacity_report', { input_password: sessionPassword }).then(({ data, error }) => {
+    if(error || !data || data.length === 0){
+      list.innerHTML = '<div class="empty-state">No active classes.</div>';
+      return;
+    }
+    list.innerHTML = data.map(row => `
+      <div class="related-row">
+        <span>${escapeHtml(row.class_name)}</span>
+        <span style="color:var(--muted);">${row.attended_30d}/${row.occurrences_30d * row.capacity} attended · <b style="color:var(--ink);">${row.utilization_pct}%</b></span>
+      </div>
+    `).join('');
+  });
+}
+
+function loadTrainerReport(){
+  const list = document.getElementById('trainerReportList');
+  supabaseClient.rpc('get_trainer_session_summary', { input_password: sessionPassword }).then(({ data, error }) => {
+    if(error || !data || data.length === 0){
+      list.innerHTML = '<div class="empty-state">No active trainers.</div>';
+      return;
+    }
+    list.innerHTML = data.map(row => `
+      <div class="related-row">
+        <span>${escapeHtml(row.trainer_name)}</span>
+        <span style="color:var(--muted);"><b style="color:var(--ink);">${row.sessions_this_month}</b> sessions</span>
+      </div>
+    `).join('');
   });
 }
 
