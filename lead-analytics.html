@@ -185,6 +185,7 @@
   .status-active{background:rgba(95,185,138,0.15); color:var(--green);}
   .status-expiring{background:rgba(232,169,61,0.15); color:var(--gold);}
   .status-expired{background:rgba(224,100,90,0.15); color:var(--red);}
+  .severity-urgent{background:var(--red); color:#fff; font-weight:700;}
   .status-frozen{background:rgba(111,168,220,0.15); color:var(--blue);}
   .status-cancelled{background:var(--panel-raised); color:var(--muted); border:1px solid var(--line);}
   .expiry-badge{font-size:11px; font-weight:600; color:var(--muted);}
@@ -299,6 +300,8 @@
 
   <div id="issuesPanel" style="display:none;">
     <div class="stats-row" id="issueStatsRow"></div>
+    <button class="small-btn" id="addIssueBtn" style="margin-bottom:14px; width:auto;">+ Add issue</button>
+    <div class="add-member-form" id="addIssueForm"></div>
     <div id="issuesList"></div>
   </div>
 
@@ -363,6 +366,7 @@ let bookingFilter = 'upcoming';
 let addCheckinFormOpen = false;
 let addLeadFormOpen = false;
 let approveOpenFreezeId = null;
+let addIssueFormOpen = false;
 
 function tryLogin(){
   const pw = document.getElementById('pwInput').value;
@@ -1892,11 +1896,54 @@ function renderFreezesPanel(){
 function renderIssuesPanel(){
   const issues = analytics.facility_issues || [];
   const open = issues.filter(i => i.status === 'open');
+  const urgent = open.filter(i => i.severity === 'urgent');
 
   document.getElementById('issueStatsRow').innerHTML = `
     <div class="stat"><b>${open.length}</b>Open</div>
+    <div class="stat escalated"><b>${urgent.length}</b>Urgent</div>
     <div class="stat"><b>${issues.length}</b>Total</div>
   `;
+
+  document.getElementById('addIssueBtn').onclick = () => { addIssueFormOpen = !addIssueFormOpen; renderIssuesPanel(); };
+  const formEl = document.getElementById('addIssueForm');
+  formEl.className = 'add-member-form' + (addIssueFormOpen ? ' open' : '');
+  formEl.innerHTML = `
+    <div class="full"><label>Description</label><textarea id="addIssueDescription" rows="2" placeholder="What's the issue?" style="width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:4px; font-size:13px; font-family:inherit; background:var(--panel); color:var(--ink); resize:vertical;"></textarea></div>
+    <div>
+      <label>Severity</label>
+      <select id="addIssueSeverity">
+        <option value="normal">Normal</option>
+        <option value="urgent">Urgent</option>
+      </select>
+    </div>
+    <div class="full"><div class="action-error" id="addIssueError"></div><button class="small-btn" id="confirmAddIssueBtn">Add issue</button></div>
+  `;
+  if(addIssueFormOpen){
+    document.getElementById('confirmAddIssueBtn').onclick = () => {
+      const description = document.getElementById('addIssueDescription').value.trim();
+      const severity = document.getElementById('addIssueSeverity').value;
+      const errEl = document.getElementById('addIssueError');
+      if(!description){
+        errEl.textContent = 'Description is required.';
+        errEl.style.display = 'block';
+        return;
+      }
+      const btn = document.getElementById('confirmAddIssueBtn');
+      btn.disabled = true;
+      supabaseClient.rpc('add_facility_issue', {
+        input_password: sessionPassword, description_input: description, severity_input: severity
+      }).then(({ error }) => {
+        if(error){
+          errEl.textContent = 'Could not add issue — please try again.';
+          errEl.style.display = 'block';
+          btn.disabled = false;
+          return;
+        }
+        addIssueFormOpen = false;
+        refreshAnalytics().then(renderDash);
+      });
+    };
+  }
 
   const list = document.getElementById('issuesList');
   if(issues.length === 0){
@@ -1919,7 +1966,9 @@ function renderIssuesPanel(){
           <span class="lead-phone">${escapeHtml(reporter)} · ${dateStr}</span>
         </div>
         <div class="lead-meta">
+          ${i.severity === 'urgent' ? '<span class="status-pill severity-urgent">Urgent</span>' : ''}
           <span class="status-pill ${i.status === 'open' ? 'status-expired' : 'status-active'}">${i.status === 'open' ? 'Open' : 'Resolved'}</span>
+          ${i.status === 'open' ? `<button class="small-btn secondary toggle-severity-btn">${i.severity === 'urgent' ? 'Mark normal' : 'Mark urgent'}</button>` : ''}
           ${i.status === 'open' ? '<button class="small-btn resolve-issue-btn">Mark resolved</button>' : ''}
         </div>
       </div>
@@ -1929,6 +1978,12 @@ function renderIssuesPanel(){
       row.querySelector('.resolve-issue-btn').onclick = () => {
         supabaseClient.rpc('resolve_facility_issue', { input_password: sessionPassword, issue_id_input: i.id })
           .then(({ error }) => { if(!error) refreshAnalytics().then(renderDash); });
+      };
+      row.querySelector('.toggle-severity-btn').onclick = () => {
+        const newSeverity = i.severity === 'urgent' ? 'normal' : 'urgent';
+        supabaseClient.rpc('update_facility_issue_severity', {
+          input_password: sessionPassword, issue_id_input: i.id, severity_input: newSeverity
+        }).then(({ error }) => { if(!error) refreshAnalytics().then(renderDash); });
       };
     }
 
